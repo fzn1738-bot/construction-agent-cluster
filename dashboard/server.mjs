@@ -47,6 +47,7 @@ const server = http.createServer(async (req, res) => {
   const p = url.pathname;
   try {
     if (p === '/healthz') return send(res, 200, { ok: true, app: SPEC.title || 'dashboard', id: process.env.HQ_APP_ID || null, mock: MOCK });
+    if (p === '/api/status' && req.method === 'GET') return send(res, 200, await safely(() => hooks.status(), {}));
     if (p === '/api/summary' && req.method === 'GET') return send(res, 200, await summary());
     if (p === '/api/run' && req.method === 'POST') {
       const b = await body(req);
@@ -81,7 +82,13 @@ const server = http.createServer(async (req, res) => {
 export async function start(port = Number(process.env.PORT) || SPEC.port || 4100, host = process.env.HOST || '127.0.0.1') {
   // Start the solution's own background work (e.g. a continuous loop) at boot, not on the first request.
   if (typeof hooks.init === 'function') { try { await hooks.init(); } catch (e) { console.error('hooks.init failed:', e && e.message || e); } }
-  return new Promise((resolve) => server.listen(port, host, () => resolve(server)));
+  return new Promise((resolve, reject) => {
+    const onError = (error) => {
+      Promise.resolve(hooks.shutdown?.()).catch(() => {}).finally(() => reject(error));
+    };
+    server.once('error', onError);
+    server.listen(port, host, () => { server.removeListener('error', onError); resolve(server); });
+  });
 }
 if (process.argv[1] && fileURLToPath(import.meta.url) === path.resolve(process.argv[1])) {
   const s = await start();

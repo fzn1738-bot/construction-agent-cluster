@@ -8,6 +8,9 @@ test('dashboard serves its page, health check and summary', async () => {
   const base = 'http://127.0.0.1:' + srv.address().port;
   try {
     assert.equal((await fetch(base + '/healthz')).status, 200);
+    const status = await (await fetch(base + '/api/status')).json();
+    assert.equal(typeof status.headline, 'string');
+    assert.equal(status.primary.label, 'Active Tasks');
     const page = await (await fetch(base + '/')).text();
     assert.match(page, /id="orb"/);
     const s = await (await fetch(base + '/api/summary')).json();
