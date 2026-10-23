@@ -32,6 +32,8 @@ export class FolderMonitor {
    * Actions run on a small worker pool, decoupled from scanning: a poll waits at most actionWaitMs for them, so a slow
    * action never delays detection of later additions. With intervalMs=1000 and settleMs=1000 a new file is detected
    * and its action started within ~3s, well inside the 5s requirement. Delivery is at-least-once across crashes.
+   * A failed action fails the poll (so the agent's retries apply and the task shows as failed) until it succeeds; after
+   * maxActionAttempts it is given up and keeps failing every poll until the file is modified (retried) or removed.
    */
   constructor({ name, dir, store, onAdd = 'log', intervalMs = 1000, settleMs = 1000, recursive = false, budgetMs = 2000, baseline = false, maxActionAttempts = 3, retries = 1, concurrency = 4, actionWaitMs = 500 }) {
     Object.assign(this, { name, dir: path.resolve(dir), store, intervalMs, settleMs, recursive, budgetMs, baseline, maxActionAttempts, retries, concurrency: Math.max(1, concurrency), actionWaitMs });
@@ -74,12 +76,14 @@ export class FolderMonitor {
       return 'new';
     }
     if (prev.size !== sig.size || prev.mtimeMs !== sig.mtimeMs) { // still being written, or modified after delivery
-      const wasEmitted = prev.emitted;
+      const wasEmitted = prev.emitted && !prev.gaveUp;
       Object.assign(prev, sig, { stable: false });
+      if (prev.gaveUp) Object.assign(prev, { emitted: false, gaveUp: false, attempts: 0, error: undefined }); // new content: try again
       return wasEmitted ? 'modified' : 'pending';
     }
     prev.ino = sig.ino;
-    if (!prev.emitted && now - s.mtimeMs >= this.settleMs) prev.stable = true;
+    // Date.now() is whole milliseconds while mtimeMs is fractional: floor it so a file from "this" millisecond can settle.
+    if (!prev.emitted && now - Math.floor(s.mtimeMs) >= this.settleMs) prev.stable = true;
     return prev.stable ? 'stable' : 'pending';
   }
 
@@ -117,7 +121,7 @@ export class FolderMonitor {
       const old = known[rel];
       const to = fresh.find((f) => known[f].ino === old.ino && known[f].size === old.size);
       if (to && old.emitted) {
-        Object.assign(known[to], { emitted: true, stable: true }); fresh.splice(fresh.indexOf(to), 1); result.renamed++;
+        Object.assign(known[to], { emitted: true, stable: true }, old.gaveUp ? { gaveUp: true, error: old.error, attempts: old.attempts } : {}); fresh.splice(fresh.indexOf(to), 1); result.renamed++;
         this.store.log('folder', 'ok', { monitor: this.name, event: 'renamed', from: rel, to });
       } else {
         result.removed++;
@@ -143,6 +147,13 @@ export class FolderMonitor {
     }
     this._save();
     result.queued = this.queueDepth;
+    // Undelivered files (failed actions, including ones already finished after an earlier poll) fail the poll.
+    const failing = Object.entries(known).filter(([, k]) => k.error);
+    if (failing.length) {
+      const err = new Error(failing.length + ' file action(s) failed: ' + failing.map(([f, k]) => f + (k.gaveUp ? ' (gave up)' : '') + ': ' + k.error).join('; ').slice(0, 300));
+      err.result = result;
+      throw err;
+    }
     return result;
   }
 
@@ -163,12 +174,12 @@ export class FolderMonitor {
     const abs = path.join(this.dir, rel);
     try {
       const out = await this.action({ kind: 'added', monitor: this.name, name: rel, path: abs, size: k.size });
-      k.emitted = true; result.added++;
+      Object.assign(k, { emitted: true, error: undefined }); result.added++;
       this.store.log('folder', 'ok', { monitor: this.name, event: 'added', path: abs, size: k.size, action: out ?? undefined });
     } catch (err) {
-      k.attempts = (k.attempts || 0) + 1; result.failed++;
-      if (k.attempts >= this.maxActionAttempts) k.emitted = true; // give up; do not loop forever
-      this.store.log('folder', 'failed', { monitor: this.name, event: 'added', path: abs, error: errText(err), attempts: k.attempts, gaveUp: k.emitted });
+      k.attempts = (k.attempts || 0) + 1; k.error = errText(err); result.failed++;
+      if (k.attempts >= this.maxActionAttempts) Object.assign(k, { emitted: true, gaveUp: true }); // stop re-running it, keep reporting it
+      this.store.log('folder', 'failed', { monitor: this.name, event: 'added', path: abs, error: k.error, attempts: k.attempts, gaveUp: Boolean(k.gaveUp) });
     }
   }
 
@@ -182,6 +193,13 @@ export class FolderMonitor {
 const mtimeOf = (modify) => modify || null;
 const sameLocal = (rec, st) => Boolean(rec && rec.local && st && rec.local.size === st.size && rec.local.mtimeMs === st.mtimeMs);
 const sameRemote = (rec, f) => Boolean(rec && f && rec.size === f.size && rec.modify === mtimeOf(f.modify));
+/** An upload whose server modify time was never read back (the listing after RNTO failed): adopt it from this listing. */
+const confirmUpload = (rec, f) => {
+  if (!rec || !rec.unconfirmed || !f) return false;
+  delete rec.unconfirmed;
+  if (rec.size !== f.size) return false; // changed on the server since: let the normal rules decide
+  rec.modify = mtimeOf(f.modify); return true;
+};
 
 export class FtpMonitor {
   /**
@@ -220,6 +238,7 @@ export class FtpMonitor {
       await c.connect();
       const remote = (await c.list(this.remoteDir)).filter((f) => /^[^/\\]+$/.test(f.name) && !f.name.startsWith('.') && !f.name.endsWith('.part')); // never escape localDir
       const rmap = new Map(remote.map((f) => [f.name, f]));
+      if (remote.reduce((n, f) => n + confirmUpload(files[f.name], f), 0)) save();
       if (this.direction !== 'upload') {
         for (const f of remote) {
           const rec = files[f.name]; const local = path.join(this.localDir, f.name);
@@ -261,15 +280,22 @@ export class FtpMonitor {
             const t0 = Date.now(); const base = this._remote(e.name);
             await c.upload(local, base + '.part');
             await c.rename(base + '.part', base);
-            files[e.name] = { size: st.size, modify: null, local: { size: st.size, mtimeMs: st.mtimeMs } };
+            files[e.name] = { size: st.size, modify: null, unconfirmed: true, local: { size: st.size, mtimeMs: st.mtimeMs } };
             save(); uploaded.push(e.name);
             res.uploaded++; this.store.log('ftp', 'ok', { monitor: this.name, op: 'upload', file: e.name, bytes: st.size, ms: Date.now() - t0, reason: rec ? (r ? 'local changed' : 'remote copy missing') : 'new' });
           } catch (err) { fail(e.name, 'upload', err); if (ctx.signal && ctx.signal.aborted) throw err; }
         }
         if (uploaded.length) {
           // Record the server's own size and modify time for what we wrote, so later remote edits are recognised.
-          const after = new Map((await c.list(this.remoteDir)).map((f) => [f.name, f]));
-          for (const name of uploaded) { const f = after.get(name); if (f) Object.assign(files[name], { size: f.size, modify: mtimeOf(f.modify) }); }
+          // If this listing fails the records stay `unconfirmed` and the next successful listing adopts them.
+          try {
+            const after = new Map((await c.list(this.remoteDir)).map((f) => [f.name, f]));
+            for (const name of uploaded) confirmUpload(files[name], after.get(name));
+          } catch (err) {
+            errors.push('listing after upload: ' + errText(err));
+            this.store.log('ftp', 'failed', { monitor: this.name, op: 'confirm', files: uploaded, error: errText(err) });
+            if (ctx.signal && ctx.signal.aborted) throw err;
+          }
         }
       }
     } catch (e) {

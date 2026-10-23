@@ -33,7 +33,10 @@ test('the loop starts with the server, before any page or API request', async ()
 
     const s = await (await fetch(base + '/api/summary')).json();
     assert.equal(s.status.headline === 'Healthy' || s.status.headline === 'Working', true, 'loop running: ' + s.status.headline);
-    const mons = s.panels.find((p) => p.title === 'Monitors');
+    const spec = JSON.parse(fs.readFileSync(new URL('../dashboard/dashboard.json', import.meta.url), 'utf8'));
+    assert.deepEqual(s.panels.map((p) => p.title), spec.panels.map((p) => p.title), 'panels follow dashboard.json');
+    const hooks = await import('../dashboard/hooks.mjs');
+    const mons = hooks.monitorTable();
     assert.deepEqual(mons.columns, ['Monitor', 'State', 'Last run', 'Queue']);
     assert.equal(mons.rows[0][0], 'Folder · drawings');
     assert.ok(['OK', 'Running'].includes(mons.rows[0][1].text), 'state chip ' + JSON.stringify(mons.rows[0][1]));

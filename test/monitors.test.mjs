@@ -79,9 +79,59 @@ test('F2: inaccessible folder fails the poll; failed actions retry then give up'
   const dir = tmp(); let tries = 0;
   const m = new FolderMonitor({ name: 'f', dir, store, settleMs: 0, maxActionAttempts: 2, onAdd: () => { tries++; throw new Error('action broke'); } });
   fs.writeFileSync(path.join(dir, 'a'), '1');
-  for (let i = 0; i < 6; i++) await m.poll();
+  await m.poll(); // first sighting: recorded, action runs once the size is confirmed stable
+  for (let i = 0; i < 6; i++) await assert.rejects(m.poll(), /1 file action\(s\) failed: a/);
   assert.equal(tries, 2);
   assert.ok(store.recentLogs({ type: 'folder' }).some((l) => l.status === 'failed' && l.details.gaveUp));
+});
+
+test('F2: a permanently failing action shows as a failed task until the file is fixed or removed', async () => {
+  const dir = tmp(); const store = openStore(':memory:'); let broken = true; const done = [];
+  const mon = new FolderMonitor({ name: 'p', dir, store, settleMs: 0, maxActionAttempts: 2, retries: 1, onAdd: (e) => { if (broken) throw new Error('printer offline'); done.push(e.name); } });
+  const agent = new Agent({ store }).addMonitor(mon, { backoffMs: 1 });
+  const f = path.join(dir, 'rfi.pdf'); fs.writeFileSync(f, 'v1'); old(f);
+  assert.equal((await agent.runTask(mon.id)).status, 'ok', 'first sighting only records the file');
+  let r = await agent.runTask(mon.id);
+  assert.equal(r.status, 'failed'); assert.equal(r.attempts, 2, 'agent retried the poll');
+  assert.match(r.error, /rfi\.pdf \(gave up\): printer offline/);
+  assert.equal(store.getTask(mon.id).status, 'failed', 'visible task state is failed');
+  r = await agent.runTask(mon.id);
+  assert.equal(r.status, 'failed', 'given-up file keeps the task failed'); assert.deepEqual(done, []);
+  broken = false; fs.writeFileSync(f, 'v2 fixed'); old(f);
+  assert.equal((await agent.runTask(mon.id)).status, 'ok', 'modified: failure cleared, waiting for the file to settle');
+  r = await agent.runTask(mon.id);
+  assert.equal(r.status, 'ok', r.error); assert.deepEqual(done, ['rfi.pdf'], 'modified file is retried and delivered');
+  broken = true; fs.writeFileSync(path.join(dir, 'bad.dwg'), 'x'); old(path.join(dir, 'bad.dwg'));
+  await agent.runTask(mon.id);
+  assert.equal((await agent.runTask(mon.id)).status, 'failed');
+  fs.rmSync(path.join(dir, 'bad.dwg'));
+  assert.equal((await agent.runTask(mon.id)).status, 'ok', 'removing the file clears the failure');
+});
+
+test('F2/F5: a slow action that outlasts graceMs still records its result before the store is closed', async () => {
+  const dir = tmp(); const file = path.join(tmp(), 'state.db'); const store = openStore(file); let finished = false;
+  const mon = new FolderMonitor({ name: 'slow', dir, store, settleMs: 0, actionWaitMs: 0, onAdd: async () => { await sleep(300); finished = true; } });
+  const agent = new Agent({ store, graceMs: 50 }).addMonitor(mon);
+  fs.writeFileSync(path.join(dir, 'model.ifc'), 'x');
+  await agent.start();
+  while (!mon.active.size) await sleep(5);
+  const { forced } = await agent.stop();
+  assert.equal(forced, true); assert.equal(finished, false, 'action still running after the grace period');
+  await agent.idle(); store.close();
+  assert.equal(finished, true);
+  const again = openStore(file);
+  try {
+    assert.equal(again.getCheckpoint('folder:slow').files['model.ifc'].emitted, true, 'checkpoint saved before close');
+    assert.ok(again.recentLogs({ type: 'folder' }).some((l) => l.details.event === 'added'));
+    assert.ok(again.recentLogs({ type: 'system' }).some((l) => l.status === 'stopped-forced'));
+  } finally { again.close(); }
+});
+
+test('F5: writes after close are dropped instead of throwing', () => {
+  const store = openStore(':memory:'); store.close();
+  assert.equal(store.log('folder', 'ok', {}), null);
+  assert.equal(store.setTask('t', 'ok'), null);
+  assert.doesNotThrow(() => store.setCheckpoint('c', {}));
 });
 
 test('F2: scans large folders within budget and still finds everything', async () => {
@@ -223,6 +273,37 @@ test('F3: upload-only re-sends a file deleted on the server and never overwrites
     assert.equal(r.uploaded, 0); assert.equal(r.skipped, 1);
     assert.equal(srv.files.get('/u/r.txt').data.toString(), 'edited on site');
     assert.ok(store.recentLogs({ type: 'ftp' }).some((l) => l.status === 'skipped' && /remote copy changed/.test(l.details.reason)));
+  } finally { await srv.close(); }
+});
+
+test('F3: a failed listing right after RNTO does not strand the upload; the next poll recovers', async () => {
+  const { FtpClient } = await import('../src/ftp-client.mjs');
+  const srv = await startFtp({});
+  const store = openStore(':memory:'); const local = tmp();
+  fs.writeFileSync(path.join(local, 'site.txt'), 'pour log'); old(path.join(local, 'site.txt'));
+  let failList = 0;
+  const client = () => {
+    const c = new FtpClient({ host: '127.0.0.1', port: srv.port, user: 'bob', password: 'secret' });
+    const list = c.list.bind(c); let n = 0;
+    c.list = async (d) => { n++; if (n === 2 && failList-- > 0) throw new Error('425 cannot open data connection'); return list(d); };
+    return c;
+  };
+  const mk = () => new FtpMonitor({ name: 'cf', store, remoteDir: '/c', localDir: local, direction: 'upload', settleMs: 0, client });
+  try {
+    failList = 1;
+    await assert.rejects(mk().poll(), /listing after upload: 425/);
+    assert.equal(srv.files.get('/c/site.txt').data.toString(), 'pour log', 'RNTO happened');
+    assert.equal(store.getCheckpoint('ftp:cf').files['site.txt'].unconfirmed, true);
+    assert.ok(store.recentLogs({ type: 'ftp' }).some((l) => l.status === 'failed' && l.details.op === 'confirm'));
+    let r = await mk().poll();
+    assert.deepEqual([r.uploaded, r.skipped], [0, 0], 'recognised as our own upload, not a remote change');
+    const rec = store.getCheckpoint('ftp:cf').files['site.txt'];
+    assert.equal(rec.unconfirmed, undefined); assert.equal(rec.modify, srv.files.get('/c/site.txt').modify);
+    fs.writeFileSync(path.join(local, 'site.txt'), 'pour log v2'); old(path.join(local, 'site.txt'));
+    r = await mk().poll();
+    assert.equal(r.uploaded, 1, 'later local edits still upload');
+    assert.equal(srv.files.get('/c/site.txt').data.toString(), 'pour log v2');
+    assert.equal(srv.log.filter((l) => l.startsWith('STOR')).length, 2);
   } finally { await srv.close(); }
 });
 

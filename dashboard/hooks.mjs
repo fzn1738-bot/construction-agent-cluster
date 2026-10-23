@@ -14,6 +14,8 @@ const HERE = path.dirname(fileURLToPath(import.meta.url));
 const ROOT = path.join(HERE, '..');
 const DATA = path.join(HERE, 'data');
 const REPORTS = path.join(DATA, 'reports');
+// dashboard.json is the layout spec: panels() returns exactly the panels it lists, in its order.
+const SPEC_PANELS = JSON.parse(fs.readFileSync(path.join(HERE, 'dashboard.json'), 'utf8')).panels.map((p) => p.title);
 
 export const actions = [{ id: 'run', label: 'Run Now', description: 'Manually trigger all scheduled tasks', input: null }];
 
@@ -31,15 +33,21 @@ function runtime() {
   agent.on('log', (l) => { if (l.level === 'error') store.log('system', 'error', { message: l.message }); });
   rt = { store, agent, monitors, configError };
   if (agent.tasks.size && process.env.AGENT_AUTOSTART !== '0') agent.start().catch((e) => { rt.configError = e.message; });
-  for (const sig of ['SIGTERM', 'SIGINT']) process.once(sig, () => agent.stop().finally(() => process.exit(0)));
+  for (const sig of ['SIGTERM', 'SIGINT']) process.once(sig, () => shutdown().finally(() => process.exit(0)));
   return rt;
 }
 
-/** Stop the loop (waiting for in-flight work) and close the database. */
+/**
+ * Stop the loop (waiting up to the grace period for in-flight work) and close the database. If work outlasted the
+ * grace period the database is closed only once that work has finished, so it can still record its result.
+ */
 export async function shutdown() {
-  if (!rt) return;
+  if (!rt) return { forced: false };
   const { agent, store } = rt; rt = null;
-  await agent.stop(); store.close();
+  const { forced } = await agent.stop();
+  const closed = agent.idle().then(() => store.close());
+  if (!forced) await closed;
+  return { forced, closed };
 }
 
 /** Called once by server.mjs when it starts listening: opens the store and starts the loop. */
@@ -67,6 +75,12 @@ const monitorRows = ({ agent, monitors }) => agent.snapshot().tasks.map((t) => {
 });
 const taskRuns = (store, limit = 100) => store.db.prepare("SELECT * FROM sync_log WHERE type IN ('folder','ftp','imap','task') AND json_extract(details, '$.attempt') IS NOT NULL ORDER BY timestamp DESC, id DESC LIMIT ?").all(limit).map((r) => ({ ...r, details: JSON.parse(r.details) }));
 
+// Event rows only: a task's own per-poll 'ok' row (it has details.attempt) is not a transfer or an email.
+const FTP_TRANSFERS = "type = 'ftp' AND status = 'ok' AND json_extract(details, '$.op') IN ('download', 'upload')";
+// An email counts once it is acknowledged: handled by a rule, ignored, malformed, or given up after failed rule runs.
+const EMAILS_PROCESSED = "type = 'imap' AND json_extract(details, '$.uid') IS NOT NULL AND (status IN ('ok', 'ignored', 'malformed') OR (status = 'failed' AND json_extract(details, '$.gaveUp') = 1))";
+const count1 = (store, where) => Number(store.db.prepare('SELECT COUNT(*) AS n FROM sync_log WHERE ' + where).get().n);
+
 export async function status() {
   const { store, agent, configError } = runtime();
   const snap = agent.snapshot();
@@ -76,8 +90,8 @@ export async function status() {
   const count = (kind) => tasks.filter((t) => t.kind === kind).length;
   const ring = [
     { label: 'Polling Folders', value: count('folder') },
-    { label: 'FTP Transfers', value: store.recentLogs({ type: 'ftp', limit: 5000 }).filter((l) => l.status === 'ok').length },
-    { label: 'Emails Processed', value: store.recentLogs({ type: 'imap', limit: 5000 }).filter((l) => l.status === 'ok').length }
+    { label: 'FTP Transfers', value: count1(store, FTP_TRANSFERS) },
+    { label: 'Emails Processed', value: count1(store, EMAILS_PROCESSED) }
   ];
   let mood = 'ok', headline = 'Healthy', detail = tasks.length + ' task(s) scheduled' + (snap.running ? ', loop running' : '');
   if (!integ.ok) { mood = 'bad'; headline = 'Database problem'; detail = integ.problems[0]; }
@@ -106,17 +120,21 @@ export async function metrics() {
 const WARN = new Set(['skipped', 'malformed', 'interrupted', 'reset', 'stopped-forced', 'recovered']);
 const level = (st) => (st === 'failed' || st === 'error' ? 'error' : WARN.has(st) ? 'warn' : 'info');
 
+/** One row per monitor: name, state chip, last run, queue depth. Shown when dashboard.json lists a "Monitors" panel. */
+export function monitorTable() { return { title: 'Monitors', kind: 'table', columns: ['Monitor', 'State', 'Last run', 'Queue'], rows: monitorRows(runtime()) }; }
+
 export async function panels() {
   const { store } = runtime();
   const runs = taskRuns(store, 10);
   // Events (files, transfers, emails, errors), not the routine successful poll of every task: those are Recent Runs.
   const logs = store.db.prepare("SELECT * FROM sync_log WHERE NOT (status = 'ok' AND json_extract(details, '$.attempt') IS NOT NULL) ORDER BY timestamp DESC, id DESC LIMIT 12").all().map((r) => ({ ...r, details: JSON.parse(r.details) }));
   const line = (l) => [(l.details.task || l.details.monitor || l.type) + ': ' + (l.details.event || l.details.op || l.details.error || l.details.note || l.status) + (l.details.path ? ' ' + path.basename(l.details.path) : l.details.file ? ' ' + l.details.file : l.details.subject ? ' ' + l.details.subject : ''), rel(l.timestamp) + ' · ' + level(l.status)];
-  return [
-    { title: 'Recent Runs', kind: 'table', columns: ['Task', 'Status', 'Time'], rows: runs.map((r) => [r.details.task, r.status === 'ok' ? 'OK' : 'Failed (try ' + r.details.attempt + ')', rel(r.timestamp)]) },
-    { title: 'System Logs', kind: 'list', columns: ['Timestamp', 'Level', 'Message'], rows: logs.map(line) },
-    { title: 'Monitors', kind: 'table', columns: ['Monitor', 'State', 'Last run', 'Queue'], rows: monitorRows(runtime()) }
-  ];
+  const all = {
+    'Recent Runs': () => ({ title: 'Recent Runs', kind: 'table', columns: ['Task', 'Status', 'Time'], rows: runs.map((r) => [r.details.task, r.status === 'ok' ? 'OK' : 'Failed (try ' + r.details.attempt + ')', rel(r.timestamp)]) }),
+    'System Logs': () => ({ title: 'System Logs', kind: 'list', columns: ['Timestamp', 'Level', 'Message'], rows: logs.map(line) }),
+    Monitors: monitorTable
+  };
+  return SPEC_PANELS.filter((t) => all[t]).map((t) => all[t]());
 }
 
 export async function run(id) {

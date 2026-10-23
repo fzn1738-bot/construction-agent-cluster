@@ -22,7 +22,7 @@ export class Agent extends EventEmitter {
     this.tasks = new Map(); this.inflight = new Map(); this.nextDue = new Map();
     // id -> promise of an attempt that timed out but has not finished yet; no new attempt may start meanwhile.
     this.lingering = new Map();
-    this.running = false; this.timer = null; this.abort = null; this.startedAt = null;
+    this.running = false; this.timer = null; this.abort = null; this.startedAt = null; this.pending = null;
   }
 
   /**
@@ -78,17 +78,26 @@ export class Agent extends EventEmitter {
     this._schedule(this.tickMs);
   }
 
-  /** Graceful stop: no new runs, abort backoff sleeps, wait up to graceMs for in-flight work. */
+  /**
+   * Graceful stop: no new runs, abort backoff sleeps, wait up to graceMs for in-flight work.
+   * Resolves to { forced }: forced means work was still running when the grace period expired; it keeps using the
+   * store until idle() resolves, so close the store only after that (see dashboard/hooks.mjs shutdown()).
+   */
   async stop() {
-    if (!this.running) return;
+    if (!this.running) return { forced: false };
     this.running = false; clearTimeout(this.timer); this.abort.abort();
     const drains = [...this.tasks.values()].filter((t) => t.drain).map((t) => Promise.resolve().then(t.drain));
-    const pending = Promise.allSettled([...this.inflight.values(), ...this.lingering.values(), ...drains]);
-    let timedOut = false;
-    await Promise.race([pending, sleep(this.graceMs).then(() => { timedOut = true; })]);
+    const pending = this.pending = Promise.allSettled([...this.inflight.values(), ...this.lingering.values(), ...drains]).then(() => {});
+    let timedOut = false, graceTimer;
+    await Promise.race([pending, new Promise((r) => { graceTimer = setTimeout(() => { timedOut = true; r(); }, this.graceMs); })]);
+    clearTimeout(graceTimer);
     this.store.log('system', timedOut ? 'stopped-forced' : 'stopped', { inflight: [...this.inflight.keys()] });
     this.log('info', timedOut ? 'agent stopped (grace period expired)' : 'agent stopped');
+    return { forced: timedOut };
   }
+
+  /** Resolves once all work that was running at stop() (tasks, timed-out attempts, monitor drains) has finished. */
+  idle() { return Promise.allSettled([this.pending, ...this.inflight.values(), ...this.lingering.values()]).then(() => {}); }
 
   /** Run one task now, with retries. Resolves to { id, status, attempts, error?, result? }. */
   runTask(id, trigger = 'manual') {

@@ -28,6 +28,29 @@ test('dashboard hooks reflect real agent state after Run Now', async () => {
   assert.ok(reps.every((x) => fs.existsSync(path.join('dashboard/data/reports', path.basename(x.href)))));
 });
 
+test('ring counts transfers and processed emails, not routine successful polls', async () => {
+  const before = (await hooks.status()).ring;
+  const { openStore } = await import('../src/sqlite-utils.mjs');
+  const w = openStore(process.env.AGENT_DB);
+  try {
+    w.log('ftp', 'ok', { task: 'ftp:site', attempt: 1, trigger: 'schedule', result: { downloaded: 0, uploaded: 0 } });
+    w.log('imap', 'ok', { task: 'imap:pm', attempt: 1, trigger: 'schedule', result: { processed: 0 } });
+    w.log('ftp', 'skipped', { monitor: 'site', op: 'download', file: 'x' });
+    let s = await hooks.status();
+    assert.deepEqual([s.ring[1].value, s.ring[2].value], [before[1].value, before[2].value], 'polls with no work do not count');
+    w.log('ftp', 'ok', { monitor: 'site', op: 'download', file: 'a.dwg' });
+    w.log('ftp', 'ok', { monitor: 'site', op: 'upload', file: 'b.pdf' });
+    w.log('imap', 'ok', { monitor: 'pm', uid: 1, rule: 'rfi' });
+    w.log('imap', 'ignored', { monitor: 'pm', uid: 2 });
+    w.log('imap', 'malformed', { monitor: 'pm', uid: 3 });
+    w.log('imap', 'failed', { monitor: 'pm', uid: 4, gaveUp: false });
+    w.log('imap', 'failed', { monitor: 'pm', uid: 4, gaveUp: true });
+    s = await hooks.status();
+    assert.equal(s.ring[1].value, before[1].value + 2);
+    assert.equal(s.ring[2].value, before[2].value + 4, 'a retried message counts once, when acknowledged');
+  } finally { w.close(); }
+});
+
 test('failing monitor turns the orb red', async () => {
   fs.rmSync(watch, { recursive: true });
   const r = await hooks.run('run');

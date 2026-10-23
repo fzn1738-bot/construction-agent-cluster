@@ -16,7 +16,7 @@ export const SCHEMA_VERSION = MIGRATIONS.length;
 const parse = (s, fallback) => { try { return JSON.parse(s); } catch { return fallback; } };
 
 export class Store {
-  constructor(db, file, recovered = null) { this.db = db; this.file = file; this.recovered = recovered; this._depth = 0; this._seq = 0; }
+  constructor(db, file, recovered = null) { this.db = db; this.file = file; this.recovered = recovered; this._depth = 0; this._seq = 0; this.closed = false; }
 
   /** Run fn inside one transaction; nested calls join the outer one. Rolls back on throw. */
   transaction(fn) {
@@ -29,6 +29,7 @@ export class Store {
   }
 
   setTask(id, status, details = {}) {
+    if (this.closed) return null; // late write from work that outlived a forced shutdown: dropped, never a crash
     const row = { id: String(id), status, timestamp: new Date().toISOString(), details: JSON.stringify(details) };
     this.db.prepare('INSERT INTO task_state (id, status, timestamp, details) VALUES (?, ?, ?, ?) ON CONFLICT(id) DO UPDATE SET status = excluded.status, timestamp = excluded.timestamp, details = excluded.details')
       .run(row.id, row.status, row.timestamp, row.details);
@@ -50,6 +51,7 @@ export class Store {
   }
 
   log(type, status, details = {}) {
+    if (this.closed) return null;
     // Sortable unique id: timestamp + counter + random, so same-millisecond rows stay ordered.
     const ts = new Date().toISOString();
     const id = ts + '-' + String(this._seq++ % 1e6).padStart(6, '0') + '-' + randomUUID().slice(0, 8);
@@ -68,6 +70,7 @@ export class Store {
   }
 
   setCheckpoint(name, value) {
+    if (this.closed) return;
     this.db.prepare('INSERT INTO checkpoints (name, value, updated) VALUES (?, ?, ?) ON CONFLICT(name) DO UPDATE SET value = excluded.value, updated = excluded.updated')
       .run(name, JSON.stringify(value), new Date().toISOString());
   }
@@ -75,7 +78,7 @@ export class Store {
 
   integrity() { const rows = this.db.prepare('PRAGMA integrity_check').all(); return rows.length === 1 && Object.values(rows[0])[0] === 'ok' ? { ok: true, problems: [] } : { ok: false, problems: rows.map((r) => Object.values(r)[0]) }; }
   version() { return Number(this.db.prepare('PRAGMA user_version').get().user_version); }
-  close() { try { this.db.close(); } catch { /* already closed */ } }
+  close() { this.closed = true; try { this.db.close(); } catch { /* already closed */ } }
 }
 
 function migrate(db) {

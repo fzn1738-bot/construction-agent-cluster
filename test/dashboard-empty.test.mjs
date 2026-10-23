@@ -15,6 +15,6 @@ test('with no monitors configured the orb says Idle and Run Now fails instead of
   assert.equal(s.headline, 'Idle'); assert.equal(s.mood, 'wait');
   const r = await hooks.run('run');
   assert.equal(r.ok, false); assert.match(r.message, /No monitors configured/);
-  const mons = (await hooks.panels()).find((p) => p.title === 'Monitors');
+  const mons = hooks.monitorTable();
   assert.deepEqual(mons.rows, []);
 });
