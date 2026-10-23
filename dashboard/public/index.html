@@ -1,0 +1,68 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="color-scheme" content="light dark">
+<title>Dashboard</title>
+<link rel="stylesheet" href="app.css">
+<link rel="stylesheet" href="theme.css">
+</head>
+<body>
+<header class="top">
+  <div class="brand"><span class="dot" aria-hidden="true"></span><div><h1 id="appName">Dashboard</h1><p id="tagline" class="tag"></p></div></div>
+  <div class="top-r">
+    <span class="live" id="live">Live</span>
+    <button class="iconbtn" id="themeBtn" type="button" aria-pressed="false" aria-label="Dark mode">
+      <svg class="i-moon" viewBox="0 0 24 24" aria-hidden="true"><path d="M20 14.5A8 8 0 0 1 9.5 4a8 8 0 1 0 10.5 10.5z"/></svg>
+      <svg class="i-sun" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="4.2"/><path d="M12 2.5v2.2M12 19.3v2.2M2.5 12h2.2M19.3 12h2.2M5.3 5.3l1.6 1.6M17.1 17.1l1.6 1.6M5.3 18.7l1.6-1.6M17.1 6.9l1.6-1.6"/></svg>
+    </button>
+  </div>
+</header>
+
+<main>
+  <section class="orb-sec" aria-label="Status">
+    <div class="orb" id="orb">
+      <div class="orb-glow" aria-hidden="true"></div>
+      <canvas id="orbCanvas" aria-hidden="true"></canvas>
+      <div class="core">
+        <div class="core-ctx" id="coreCtx"></div>
+        <div class="core-big" id="coreBig">…</div>
+        <div class="core-rule" aria-hidden="true"></div>
+        <div class="core-val" id="coreVal">–</div>
+        <div class="core-cap" id="coreCap"></div>
+      </div>
+      <div id="orbRing" aria-hidden="true"></div>
+    </div>
+    <p class="sr" id="orbSummary" aria-live="polite"></p>
+    <div class="actions" id="actions" aria-label="Run"></div>
+    <div class="runout" id="runOut" role="status" hidden></div>
+  </section>
+
+  <section aria-labelledby="h-metrics"><h2 id="h-metrics">Performance</h2><div class="tiles" id="tiles"></div></section>
+  <section class="panels" id="panels" aria-label="Data"></section>
+
+  <section class="two">
+    <div class="card"><h2>Recent runs <span class="chip" id="health"></span></h2><div id="runs"></div></div>
+    <div class="card"><h2>Reports</h2><div id="reports"></div></div>
+  </section>
+
+  <section class="card" aria-labelledby="h-fb">
+    <h2 id="h-fb">Is it working? <span class="chip" id="fbCount"></span></h2>
+    <form id="fb" class="fb">
+      <div class="votes" role="group" aria-label="Your verdict">
+        <button type="button" class="vote" data-vote="up" aria-pressed="false">👍 Working</button>
+        <button type="button" class="vote" data-vote="down" aria-pressed="false">👎 Not right</button>
+      </div>
+      <label for="fbNote" class="sr">What should change?</label>
+      <textarea id="fbNote" maxlength="1000" placeholder="What should change? (optional)"></textarea>
+      <button class="btn primary" type="submit">Send feedback</button>
+    </form>
+    <ul class="fbrecent" id="fbRecent"></ul>
+  </section>
+  <p class="foot" id="foot"></p>
+</main>
+<script src="orb.js"></script>
+<script src="app.js"></script>
+</body>
+</html>

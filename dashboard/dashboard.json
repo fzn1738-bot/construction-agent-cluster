@@ -1,0 +1,82 @@
+{
+  "title": "Construction Agent Dashboard",
+  "tagline": "Monitor and control your construction agent operations",
+  "orb": {
+    "headline": "Healthy",
+    "metric": "Active Tasks",
+    "value": "0",
+    "detail": "System is running smoothly"
+  },
+  "ring": [
+    {
+      "label": "Polling Folders",
+      "sample": "2"
+    },
+    {
+      "label": "FTP Transfers",
+      "sample": "0"
+    },
+    {
+      "label": "Emails Processed",
+      "sample": "0"
+    }
+  ],
+  "metrics": [
+    {
+      "key": "activeTasks",
+      "label": "Active Tasks",
+      "unit": "count",
+      "good": "down"
+    },
+    {
+      "key": "syncRate",
+      "label": "Sync Rate",
+      "unit": "%",
+      "good": "up"
+    }
+  ],
+  "panels": [
+    {
+      "title": "Recent Runs",
+      "kind": "table",
+      "fields": [
+        "Task",
+        "Status",
+        "Time"
+      ]
+    },
+    {
+      "title": "System Logs",
+      "kind": "list",
+      "fields": [
+        "Timestamp",
+        "Level",
+        "Message"
+      ]
+    },
+    {
+      "title": "Monitors",
+      "kind": "table",
+      "fields": [
+        "Monitor",
+        "State",
+        "Last run",
+        "Queue"
+      ]
+    }
+  ],
+  "actions": [
+    {
+      "id": "run",
+      "label": "Run Now",
+      "description": "Manually trigger all scheduled tasks",
+      "input": null
+    }
+  ],
+  "reports": [
+    "Task History",
+    "Sync Performance"
+  ],
+  "repo": "construction-agent-cluster",
+  "port": 4102
+}

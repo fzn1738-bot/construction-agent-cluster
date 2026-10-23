@@ -1,0 +1,25 @@
+/* Construction Agent Dashboard — "site office" theme. See design/DESIGN.md. */
+:root {
+  --paper: #ebe8e1; --surface: #fbfaf7; --surface-2: #f3f1ec;
+  --ink: #1d2226; --strong: #0f1417; --ink-2: #4a5258; --ink-3: #5b646b;
+  --rule: #d6d2c8; --accent: #0a6b78; --accent-ink: #ffffff; --accent-soft: #d9eef0;
+  --ok: #17703a; --ok-soft: #dcefe2; --warn: #8a5200; --warn-soft: #f8ebcf; --bad: #b32a2a; --bad-soft: #f8e0dc;
+  --s1: #0072b2; --s2: #c24e00; --s3: #7a5a00; --s4: #7b4fa8;
+  --orb: 10 107 120; --breath: 7s;
+  --orb-ok: 10 125 140; --orb-run: 20 100 170; --orb-wait: 214 140 10; --orb-bad: 200 55 50;
+  --ring-1: #17703a; --ring-2: #0a6b78; --ring-3: #5b4a9e;
+  --shadow: 0 1px 0 rgb(29 34 38 / 0.04), 0 4px 14px rgb(29 34 38 / 0.07);
+  --sans: ui-sans-serif, -apple-system, "SF Pro Text", system-ui, "Segoe UI", Roboto, sans-serif;
+  --mono: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+}
+:root[data-theme="dark"] {
+  --paper: #12161a; --surface: #1a2025; --surface-2: #222a30;
+  --ink: #eef1f3; --strong: #ffffff; --ink-2: #b4bdc4; --ink-3: #8d98a1;
+  --rule: #2d363d; --accent: #4cc2d1; --accent-ink: #04181c; --accent-soft: rgba(76, 194, 209, 0.15);
+  --ok: #5fd48a; --ok-soft: rgba(95, 212, 138, 0.14); --warn: #f2b84b; --warn-soft: rgba(242, 184, 75, 0.14); --bad: #ff8a80; --bad-soft: rgba(255, 138, 128, 0.15);
+  --s1: #56b4e9; --s2: #ff9a52; --s3: #e6c84a; --s4: #b79af0;
+  --orb: 76 194 209; --breath: 7s;
+  --orb-ok: 76 194 209; --orb-run: 150 225 240; --orb-wait: 242 184 75; --orb-bad: 255 138 128;
+  --ring-1: #5fd48a; --ring-2: #4cc2d1; --ring-3: #b79af0;
+  --shadow: none;
+}

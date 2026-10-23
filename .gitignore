@@ -6,3 +6,11 @@ node_modules/
 *.db-shm
 *.db-wal
 *.sqlite*
+dashboard/data/
+PLAN-*.html
+AUDIT-*.html
+SPEC-*.md
+TASK-*.md
+.ai-repo-map.xml
+.ai-build-context.md
+agent.config.json
