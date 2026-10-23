@@ -1,0 +1,5 @@
+{
+  "folders": [{ "name": "drawings", "path": "./watch/drawings", "intervalMs": 1000, "action": { "exec": ["echo", "new file"] } }],
+  "ftp": [{ "name": "site", "host": "ftp.example.com", "user": "agent", "passwordEnv": "SITE_FTP_PASSWORD", "secure": "explicit", "remoteDir": "/projects", "localDir": "./sync/site", "direction": "download", "intervalMs": 300000 }],
+  "imap": [{ "name": "pm", "host": "imap.example.com", "user": "agent@example.com", "passwordEnv": "PM_IMAP_PASSWORD", "mailbox": "INBOX", "intervalMs": 60000, "rules": [{ "name": "rfi", "subject": "RFI", "action": "log" }] }]
+}

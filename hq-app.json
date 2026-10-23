@@ -1,0 +1,6 @@
+{
+  "name": "Construction Agent Dashboard",
+  "port": 4102,
+  "start": "node dashboard/server.mjs",
+  "health": "/healthz"
+}
