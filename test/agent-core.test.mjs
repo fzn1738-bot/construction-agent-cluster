@@ -46,11 +46,58 @@ test('F1: retries are limited and final failure is persisted', async () => {
   assert.equal(t.status, 'failed'); assert.equal(t.details.error, 'always');
 });
 
-test('F1: task timeout counts as a failure', async () => {
+test('F1: task timeout counts as a failure and aborts the attempt signal, then retries', async () => {
   const agent = new Agent();
-  agent.addTask({ id: 'slow', timeoutMs: 20, run: () => new Promise(() => {}) });
+  let calls = 0; const aborted = [];
+  agent.addTask({ id: 'slow', timeoutMs: 20, retries: 1, backoffMs: 1, run: ({ signal }) => new Promise((_, rej) => {
+    calls++; signal.addEventListener('abort', () => { aborted.push(signal.reason.message); rej(signal.reason); });
+  }) });
   const r = await agent.runTask('slow');
-  assert.equal(r.status, 'failed'); assert.match(r.error, /timed out/);
+  assert.equal(r.status, 'failed'); assert.match(r.error, /timed out after 20ms/);
+  assert.equal(calls, 2); assert.equal(r.attempts, 2);
+  assert.deepEqual(aborted, ['timed out after 20ms', 'timed out after 20ms']);
+});
+
+test('F1: a timed-out attempt that ignores abort finishes before its retry starts (no overlap)', async () => {
+  const store = openStore(':memory:');
+  const agent = new Agent({ store });
+  let running = 0, maxRunning = 0; const spans = [];
+  agent.addTask({ id: 'stubborn', timeoutMs: 50, timeoutGraceMs: 2000, retries: 1, backoffMs: 1, run: async ({ attempt }) => {
+    running++; maxRunning = Math.max(maxRunning, running); const s0 = Date.now();
+    await new Promise((r) => setTimeout(r, attempt === 1 ? 200 : 5)); // attempt 1 overruns and ignores the signal
+    running--; spans.push([s0, Date.now()]);
+    return 'done';
+  } });
+  const r = await agent.runTask('stubborn');
+  assert.equal(r.status, 'ok'); assert.equal(r.attempts, 2);
+  assert.equal(maxRunning, 1, 'attempts never overlapped');
+  assert.ok(spans[1][0] >= spans[0][1], 'retry started after the timed-out attempt ended');
+});
+
+test('F1: an attempt that never ends after timeout locks the task instead of overlapping it', async () => {
+  const store = openStore(':memory:');
+  const agent = new Agent({ store, tickMs: 10, graceMs: 100 });
+  let calls = 0; let release;
+  agent.addTask({ id: 'hang', intervalMs: 10, timeoutMs: 20, timeoutGraceMs: 30, retries: 3, backoffMs: 1, run: () => { calls++; return new Promise((r) => { release = r; }); } });
+  const r = await agent.runTask('hang');
+  assert.equal(r.status, 'failed'); assert.equal(r.attempts, 1, 'no retry while the attempt is still running');
+  assert.match(r.error, /still running/);
+  assert.equal(agent.snapshot().tasks[0].lingering, true);
+  const again = await agent.runTask('hang');
+  assert.equal(again.skipped, true); assert.equal(calls, 1);
+  await agent.start(); await new Promise((res) => setTimeout(res, 80));
+  assert.equal(calls, 1, 'the loop does not start the task while it is locked');
+  release(); await new Promise((res) => setTimeout(res, 60));
+  await agent.stop();
+  assert.ok(calls >= 2, 'runs again once the old attempt has finished');
+});
+
+test('F1: stop() waits for a task drain hook (e.g. running folder actions)', async () => {
+  const agent = new Agent({ tickMs: 10 });
+  let drained = false;
+  agent.addTask({ id: 'd', intervalMs: 100000, run: () => 1, drain: async () => { await new Promise((r) => setTimeout(r, 50)); drained = true; } });
+  await agent.start(); await agent.stop();
+  assert.equal(drained, true);
 });
 
 test('F1: stop waits for in-flight task and aborts retry backoff', async () => {
@@ -131,6 +178,36 @@ test('F5: integrity check, schema version and corrupt-file recovery', () => {
   assert.equal(s.integrity().ok, true);
   assert.equal(s.recentLogs({ type: 'system' })[0].status, 'recovered');
   s.close();
+});
+
+test('F5: only confirmed corruption resets the database; other open errors keep the data', async () => {
+  const { isCorruption } = await import('../src/sqlite-utils.mjs');
+  assert.equal(isCorruption({ errcode: 11 }), true, 'SQLITE_CORRUPT');
+  assert.equal(isCorruption({ errcode: 26 }), true, 'SQLITE_NOTADB');
+  assert.equal(isCorruption({ errcode: 267 }), true, 'SQLITE_CORRUPT_VTAB (extended)');
+  for (const code of [5, 6, 8, 13, 14]) assert.equal(isCorruption({ errcode: code }), false, 'code ' + code);
+  assert.equal(isCorruption(new Error('random')), false);
+
+  // A failing migration is rethrown, and the file and its data are left alone.
+  const { DatabaseSync } = await import('node:sqlite');
+  const dir = tmp(); const file = path.join(dir, 's.db');
+  const raw = new DatabaseSync(file);
+  raw.exec("CREATE TABLE task_state (id TEXT PRIMARY KEY, status TEXT NOT NULL, timestamp TEXT NOT NULL, details TEXT NOT NULL DEFAULT '{}'); CREATE TABLE sync_log (id TEXT PRIMARY KEY, type TEXT NOT NULL, status TEXT NOT NULL, timestamp TEXT NOT NULL, details TEXT NOT NULL DEFAULT '{}'); CREATE TABLE checkpoints (name TEXT PRIMARY KEY, value TEXT NOT NULL, updated TEXT NOT NULL); CREATE INDEX sync_log_time ON task_state (id); INSERT INTO task_state VALUES ('keep','ok','2026-01-01T00:00:00Z','{}'); PRAGMA user_version = 1;");
+  raw.close();
+  assert.throws(() => openStore(file), /already exists/);
+  assert.deepEqual(fs.readdirSync(dir).filter((f) => f.includes('corrupt')), [], 'nothing moved aside');
+  const check = new DatabaseSync(file);
+  assert.equal(check.prepare('SELECT status FROM task_state WHERE id = ?').get('keep').status, 'ok');
+  assert.equal(Number(check.prepare('PRAGMA user_version').get().user_version), 1, 'failed migration rolled back');
+  check.close();
+
+  // Permission denied is not corruption either.
+  if (process.getuid && process.getuid() !== 0) {
+    const pfile = path.join(dir, 'p.db'); openStore(pfile).close();
+    fs.chmodSync(pfile, 0o000);
+    try { assert.throws(() => openStore(pfile)); assert.ok(fs.existsSync(pfile)); assert.deepEqual(fs.readdirSync(dir).filter((f) => f.includes('corrupt')), []); }
+    finally { fs.chmodSync(pfile, 0o600); }
+  }
 });
 
 test('F5: migrates an older schema in place', async () => {

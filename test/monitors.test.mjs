@@ -92,6 +92,38 @@ test('F2: scans large folders within budget and still finds everything', async (
   assert.equal(n, 600);
 });
 
+test('F2: no entry cap: a new file in a folder of 21,000 files is detected on the next polls', async () => {
+  const dir = tmp(); const store = openStore(':memory:'); const seen = [];
+  for (let i = 0; i < 21000; i++) fs.writeFileSync(path.join(dir, 'f' + String(i).padStart(5, '0')), '');
+  const m = new FolderMonitor({ name: 'huge', dir, store, settleMs: 0, baseline: true, onAdd: (e) => { seen.push(e.name); } });
+  await m.poll();
+  fs.writeFileSync(path.join(dir, 'zz-new.dwg'), 'x');
+  const t0 = Date.now();
+  const r1 = await m.poll(); await m.poll();
+  assert.equal(r1.scanned, 21001);
+  assert.deepEqual(seen, ['zz-new.dwg']);
+  assert.ok(Date.now() - t0 < 5000, 'two polls of 21k files took ' + (Date.now() - t0) + 'ms');
+});
+
+test('F2: a slow action does not delay detection of later additions', async () => {
+  const dir = tmp(); const store = openStore(':memory:'); const started = {};
+  const mon = new FolderMonitor({ name: 's', dir, store, intervalMs: 200, settleMs: 100, onAdd: async (e) => { started[e.name] = Date.now(); if (e.name === 'slow.ifc') await sleep(2500); } });
+  const agent = new Agent({ store, tickMs: 20, graceMs: 5000 }).addMonitor(mon);
+  await agent.start();
+  try {
+    fs.writeFileSync(path.join(dir, 'slow.ifc'), 's');
+    while (!started['slow.ifc']) await sleep(20);
+    const t0 = Date.now(); fs.writeFileSync(path.join(dir, 'quick.pdf'), 'q');
+    while (!started['quick.pdf'] && Date.now() - t0 < 5000) await sleep(20);
+    assert.ok(started['quick.pdf'], 'quick.pdf action started');
+    assert.ok(started['quick.pdf'] - t0 < 2000, 'started after ' + (started['quick.pdf'] - t0) + 'ms while slow.ifc was still running');
+    assert.ok(store.recentLogs({ type: 'folder' }).some((l) => l.details.event === 'detected' && /quick\.pdf$/.test(l.details.path)));
+    assert.equal(mon.queueDepth, 1, 'slow.ifc still running');
+  } finally { await agent.stop(); }
+  assert.equal(mon.queueDepth, 0, 'stop() waited for the running action');
+  assert.ok(store.recentLogs({ type: 'folder' }).some((l) => l.details.event === 'added' && /slow\.ifc$/.test(l.details.path)));
+});
+
 test('F2: exec actions run commands without a shell', async () => {
   const out = await makeAction({ exec: [process.execPath, '-e', 'console.log(process.env.EVENT_NAME)'] })({ name: 'hello.txt', path: '/x' });
   assert.equal(out.trim(), 'hello.txt');
@@ -153,6 +185,64 @@ test('F3: FTP upload sends new local files once, via temp name + rename', async 
   } finally { await srv.close(); }
 });
 
+test('F3: deleted local copy is fetched again; same-size remote change is detected for uploaded files', async () => {
+  const srv = await startFtp({ files: { '/s/a.txt': 'alpha' } });
+  const store = openStore(':memory:'); const local = tmp();
+  const mk = (direction) => new FtpMonitor({ name: 'r', store, host: '127.0.0.1', port: srv.port, user: 'bob', password: 'secret', remoteDir: '/s', localDir: local, direction, settleMs: 0 });
+  try {
+    assert.equal((await mk('download').poll()).downloaded, 1);
+    fs.rmSync(path.join(local, 'a.txt'));
+    assert.equal((await mk('download').poll()).downloaded, 1, 'local copy missing: downloaded again');
+    assert.equal(fs.readFileSync(path.join(local, 'a.txt'), 'utf8'), 'alpha');
+
+    fs.writeFileSync(path.join(local, 'b.txt'), 'bravo'); old(path.join(local, 'b.txt'));
+    let r = await mk('both').poll();
+    assert.equal(r.uploaded, 1);
+    assert.equal(store.getCheckpoint('ftp:r').files['b.txt'].modify, '20260102120000', 'server modify time recorded after upload');
+    srv.files.set('/s/b.txt', { data: Buffer.from('BRAVO'), modify: '20260301000000' }); // same size, new content
+    r = await mk('both').poll();
+    assert.equal(r.downloaded, 1); assert.equal(r.uploaded, 0);
+    assert.equal(fs.readFileSync(path.join(local, 'b.txt'), 'utf8'), 'BRAVO');
+    r = await mk('both').poll();
+    assert.deepEqual([r.downloaded, r.uploaded], [0, 0], 'in sync again');
+  } finally { await srv.close(); }
+});
+
+test('F3: upload-only re-sends a file deleted on the server and never overwrites a remote change', async () => {
+  const srv = await startFtp({});
+  const store = openStore(':memory:'); const local = tmp();
+  fs.writeFileSync(path.join(local, 'r.txt'), 'v1'); old(path.join(local, 'r.txt'));
+  const mk = () => new FtpMonitor({ name: 'up', store, host: '127.0.0.1', port: srv.port, user: 'bob', password: 'secret', remoteDir: '/u', localDir: local, direction: 'upload', settleMs: 0 });
+  try {
+    assert.equal((await mk().poll()).uploaded, 1);
+    assert.equal((await mk().poll()).uploaded, 0);
+    srv.files.delete('/u/r.txt');
+    assert.equal((await mk().poll()).uploaded, 1, 'remote copy missing: uploaded again');
+    srv.files.set('/u/r.txt', { data: Buffer.from('edited on site'), modify: '20260401000000' });
+    const r = await mk().poll();
+    assert.equal(r.uploaded, 0); assert.equal(r.skipped, 1);
+    assert.equal(srv.files.get('/u/r.txt').data.toString(), 'edited on site');
+    assert.ok(store.recentLogs({ type: 'ftp' }).some((l) => l.status === 'skipped' && /remote copy changed/.test(l.details.reason)));
+  } finally { await srv.close(); }
+});
+
+test('F3: an agent timeout aborts a hung FTP poll by closing the connection', async () => {
+  const net = await import('node:net');
+  const socks = []; const hung = net.createServer((sk) => socks.push(sk)); // accepts, never greets
+  await new Promise((r) => hung.listen(0, '127.0.0.1', r));
+  const store = openStore(':memory:');
+  const mon = new FtpMonitor({ name: 'hung', store, host: '127.0.0.1', port: hung.address().port, user: 'bob', password: 'secret', localDir: tmp(), timeoutMs: 30000, retries: 0 });
+  const agent = new Agent({ store }).addMonitor(mon, { timeoutMs: 100, timeoutGraceMs: 2000 });
+  try {
+    const t0 = Date.now();
+    const r = await agent.runTask('ftp:hung');
+    assert.equal(r.status, 'failed'); assert.match(r.error, /timed out after 100ms$/);
+    assert.ok(Date.now() - t0 < 1500, 'attempt ended promptly after abort, not after the 30s socket timeout');
+    assert.equal(agent.lingering.size, 0);
+    assert.ok(store.recentLogs({ type: 'ftp' }).some((l) => l.status === 'failed' && l.details.op === 'aborted'));
+  } finally { for (const sk of socks) sk.destroy(); hung.close(); }
+});
+
 test('F3: FTP server down -> agent retries then records failure', async () => {
   const srv = await startFtp({}); const port = srv.port; await srv.close();
   const store = openStore(':memory:');
@@ -175,7 +265,7 @@ test('F4: IMAP processes new mail by rules, once, and logs it', async () => {
   const rules = [{ name: 'rfi', subject: 'rfi', action: (m) => { got.push(m.subject); } }, { name: 'invoice', subject: /invoice/i, action: (m) => { got.push(m.subject); } }];
   try {
     const r = await imapMon(srv, store, rules).poll();
-    assert.deepEqual(r, { processed: 3, matched: 2, ignored: 1, malformed: 0, ruleFailures: 0 });
+    assert.deepEqual(r, { processed: 3, matched: 2, ignored: 1, malformed: 0, ruleFailures: 0, gaveUp: 0, backlog: 0 });
     assert.deepEqual(got, ['RFI 12 drawing update', 'Invoice café']);
     srv.state.messages.push({ uid: 4, header: hdr('arch@site.com', 'RFI 13') });
     const r2 = await imapMon(srv, store, rules).poll();
@@ -186,15 +276,43 @@ test('F4: IMAP processes new mail by rules, once, and logs it', async () => {
   } finally { await srv.close(); }
 });
 
-test('F4: IMAP bad credentials fail; malformed messages and rule failures do not block the mailbox', async () => {
+test('F4: IMAP bad credentials fail; malformed mail is skipped; a failed rule is NOT acknowledged and is retried', async () => {
   const srv = await startImap({ messages: [{ uid: 5, header: 'garbage without headers' }, { uid: 6, header: null }, { uid: 7, header: hdr('a@b.c', 'RFI boom') }, { uid: 8, header: hdr('a@b.c', 'RFI ok') }] });
   const store = openStore(':memory:');
   try {
     await assert.rejects(imapMon(srv, store, [], { password: 'nope' }).poll(), /LOGIN failed/);
-    let n = 0;
-    const r = await imapMon(srv, store, [{ subject: 'rfi', action: () => { if (n++ === 0) throw new Error('rule exploded'); } }]).poll();
-    assert.equal(r.malformed, 2); assert.equal(r.ruleFailures, 1); assert.equal(r.matched, 1); assert.equal(r.processed, 4);
+    const seen = [];
+    const rules = [{ subject: 'rfi', action: (m) => { seen.push(m.uid); if (seen.length === 1) throw new Error('rule exploded'); } }];
+    await assert.rejects(imapMon(srv, store, rules).poll(), /failed on UID 7 \(attempt 1 of 5\): rule exploded/);
+    assert.equal(store.getCheckpoint('imap:mail').lastUid, 6, 'malformed mail acknowledged, failed message is not');
+    assert.ok(store.recentLogs({ type: 'imap' }).some((l) => l.status === 'failed' && l.details.uid === 7 && l.details.gaveUp === false));
+    const r = await imapMon(srv, store, rules).poll();
+    assert.deepEqual(seen, [7, 7, 8], 'UID 7 retried, then UID 8 processed');
+    assert.equal(r.matched, 2); assert.equal(r.processed, 2);
     assert.equal(store.getCheckpoint('imap:mail').lastUid, 8);
+    assert.deepEqual(store.getCheckpoint('imap:mail').failures, {});
+  } finally { await srv.close(); }
+});
+
+test('F4: agent retries recover a failed email rule; a permanently failing rule gives up after maxRuleAttempts', async () => {
+  const srv = await startImap({ messages: [{ uid: 1, header: hdr('a@b.c', 'RFI 1') }, { uid: 2, header: hdr('a@b.c', 'RFI 2') }] });
+  const store = openStore(':memory:');
+  try {
+    let calls = 0;
+    const flaky = [{ subject: 'rfi', action: () => { if (++calls === 1) throw new Error('smtp down'); } }];
+    const agent = new Agent({ store }).addMonitor(imapMon(srv, store, flaky), { backoffMs: 1 });
+    const r = await agent.runTask('imap:mail');
+    assert.equal(r.status, 'ok'); assert.equal(r.attempts, 2, 'retried by the agent');
+    assert.equal(calls, 3); assert.equal(store.getCheckpoint('imap:mail').lastUid, 2);
+
+    const store2 = openStore(':memory:');
+    const broken = [{ subject: 'rfi 1', action: () => { throw new Error('always'); } }, { subject: 'rfi', action: () => {} }];
+    await assert.rejects(imapMon(srv, store2, broken, { maxRuleAttempts: 2 }).poll(), /attempt 1 of 2/);
+    assert.equal(store2.getCheckpoint('imap:mail').lastUid, 0);
+    const r2 = await imapMon(srv, store2, broken, { maxRuleAttempts: 2 }).poll();
+    assert.equal(r2.gaveUp, 1); assert.equal(r2.matched, 1);
+    assert.equal(store2.getCheckpoint('imap:mail').lastUid, 2, 'gave up on UID 1, mailbox not blocked');
+    assert.ok(store2.recentLogs({ type: 'imap' }).some((l) => l.status === 'failed' && l.details.gaveUp === true));
   } finally { await srv.close(); }
 });
 

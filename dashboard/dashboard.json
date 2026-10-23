@@ -53,6 +53,16 @@
         "Level",
         "Message"
       ]
+    },
+    {
+      "title": "Monitors",
+      "kind": "table",
+      "fields": [
+        "Monitor",
+        "State",
+        "Last run",
+        "Queue"
+      ]
     }
   ],
   "actions": [

@@ -19,171 +19,265 @@ export function makeAction(spec) {
   return async () => null; // 'log' (default): the monitor's own log entry is the action
 }
 
+const sleep = (ms) => new Promise((r) => { const t = setTimeout(r, ms); if (t.unref) t.unref(); });
+
 export class FolderMonitor {
   /**
-   * @param {object} o  { name, dir, store, onAdd, intervalMs=1000, settleMs=1000, recursive, maxEntries=20000, budgetMs=2000, baseline, maxActionAttempts=3 }
+   * @param {object} o  { name, dir, store, onAdd, intervalMs=1000, settleMs=1000, recursive, budgetMs=2000, baseline,
+   *                      maxActionAttempts=3, concurrency=4, actionWaitMs=500 }
    * A file triggers onAdd once it is "settled": its mtime is older than settleMs and its size has not changed since the last scan.
-   * With intervalMs=1000 and settleMs=1000 a new file is detected within ~3s, well inside the 5s requirement.
+   * Every poll lists the whole folder (no entry cap) and always stats new and not-yet-delivered files first, so a new
+   * file is seen on the next poll however large the folder is; already-delivered files are re-checked for
+   * modifications in a rotating window bounded by budgetMs (the budget includes directory enumeration).
+   * Actions run on a small worker pool, decoupled from scanning: a poll waits at most actionWaitMs for them, so a slow
+   * action never delays detection of later additions. With intervalMs=1000 and settleMs=1000 a new file is detected
+   * and its action started within ~3s, well inside the 5s requirement. Delivery is at-least-once across crashes.
    */
-  constructor({ name, dir, store, onAdd = 'log', intervalMs = 1000, settleMs = 1000, recursive = false, maxEntries = 20000, budgetMs = 2000, baseline = false, maxActionAttempts = 3, retries = 1 }) {
-    Object.assign(this, { name, dir: path.resolve(dir), store, intervalMs, settleMs, recursive, maxEntries, budgetMs, baseline, maxActionAttempts, retries });
-    this.id = 'folder:' + name; this.type = 'folder'; this.action = makeAction(onAdd); this.cursor = 0; this.pass = new Set();
+  constructor({ name, dir, store, onAdd = 'log', intervalMs = 1000, settleMs = 1000, recursive = false, budgetMs = 2000, baseline = false, maxActionAttempts = 3, retries = 1, concurrency = 4, actionWaitMs = 500 }) {
+    Object.assign(this, { name, dir: path.resolve(dir), store, intervalMs, settleMs, recursive, budgetMs, baseline, maxActionAttempts, retries, concurrency: Math.max(1, concurrency), actionWaitMs });
+    this.id = 'folder:' + name; this.type = 'folder'; this.action = makeAction(onAdd);
+    this.known = null; this.first = false; this.cursor = 0;
+    this.queue = []; this.queued = new Set(); this.active = new Map(); this.paused = false; this.saveTimer = null; this.idleWaiters = [];
   }
 
-  _scan() {
-    // Collect all file paths (relative), then process a budgeted window starting at the cursor.
+  /** Files waiting for, or running, their action. */
+  get queueDepth() { return this.queue.length + this.active.size; }
+
+  _list() {
     const files = [];
     const walk = (d, rel) => {
       for (const e of fs.readdirSync(d, { withFileTypes: true })) {
-        if (files.length >= this.maxEntries) return;
         const r = rel ? rel + '/' + e.name : e.name;
         if (e.isDirectory()) { if (this.recursive) walk(path.join(d, e.name), r); } else if (e.isFile() && !e.name.endsWith('.part') && !e.name.startsWith('.')) files.push(r);
       }
     };
     walk(this.dir, '');
-    files.sort();
-    return { files };
+    return files.sort();
+  }
+
+  _load() {
+    if (this.known) return;
+    const st = this.store.getCheckpoint(this.id, null);
+    this.first = st === null; this.known = (st && st.files) || {};
+  }
+  _save() { clearTimeout(this.saveTimer); this.saveTimer = null; this.store.setCheckpoint(this.id, { files: this.known, updatedAt: new Date().toISOString() }); }
+  _saveSoon() { if (!this.saveTimer) { this.saveTimer = setTimeout(() => this._save(), 200); if (this.saveTimer.unref) this.saveTimer.unref(); } }
+
+  /** Stat one file and update its record. Returns 'new' | 'modified' | 'stable' | 'pending' | null (vanished). */
+  _check(rel, now) {
+    let s; try { s = fs.statSync(path.join(this.dir, rel)); } catch { return null; } // vanished mid-scan
+    const known = this.known; const prev = known[rel];
+    const sig = { size: s.size, mtimeMs: s.mtimeMs, ino: s.ino };
+    if (!prev) {
+      known[rel] = { ...sig, emitted: false, attempts: 0, stable: false };
+      if (this.first && this.baseline) Object.assign(known[rel], { emitted: true, stable: true });
+      return 'new';
+    }
+    if (prev.size !== sig.size || prev.mtimeMs !== sig.mtimeMs) { // still being written, or modified after delivery
+      const wasEmitted = prev.emitted;
+      Object.assign(prev, sig, { stable: false });
+      return wasEmitted ? 'modified' : 'pending';
+    }
+    prev.ino = sig.ino;
+    if (!prev.emitted && now - s.mtimeMs >= this.settleMs) prev.stable = true;
+    return prev.stable ? 'stable' : 'pending';
   }
 
   async poll() {
-    const st = this.store.getCheckpoint(this.id, null);
-    const first = st === null;
-    const known = (st && st.files) || {};
-    const now = Date.now();
-    let files;
-    try { ({ files } = this._scan()); } catch (e) { throw new Error('folder ' + this.dir + ' is not readable: ' + errText(e)); }
+    const t0 = Date.now(); const deadline = t0 + this.budgetMs;
+    this._load();
+    let names;
+    try { names = this._list(); } catch (e) { throw new Error('folder ' + this.dir + ' is not readable: ' + errText(e)); }
+    const known = this.known; const now = Date.now();
+    const present = new Set(names);
+    const result = { added: 0, modified: 0, removed: 0, renamed: 0, failed: 0, detected: 0, scanned: names.length, checked: 0, complete: true };
 
-    // Budgeted window: with huge folders, scan a slice per poll and rotate; deletions are judged only after a full pass.
-    const start = this.cursor >= files.length ? 0 : this.cursor;
-    const deadline = Date.now() + this.budgetMs;
-    const seen = new Set(); const fresh = []; const events = []; let scanned = 0, i = start;
-    for (; scanned < files.length; scanned++, i = (i + 1) % files.length) {
-      if (scanned > 0 && scanned % 200 === 0 && Date.now() > deadline) break;
-      const rel = files[i]; seen.add(rel);
-      let s; try { s = fs.statSync(path.join(this.dir, rel)); } catch { continue; } // vanished mid-scan
-      const prev = known[rel];
-      const sig = { size: s.size, mtimeMs: s.mtimeMs, ino: s.ino };
-      if (!prev) {
-        known[rel] = { ...sig, emitted: false, attempts: 0, stable: false }; fresh.push(rel);
-        if (first && this.baseline) { known[rel].emitted = true; known[rel].stable = true; }
-      } else if (prev.size !== sig.size || prev.mtimeMs !== sig.mtimeMs) {
-        // still being written, or modified after delivery
-        const wasEmitted = prev.emitted;
-        Object.assign(prev, sig, { stable: false });
-        if (wasEmitted) events.push({ kind: 'modified', name: rel });
-        continue;
-      } else prev.ino = sig.ino;
-      const k = known[rel];
-      if (!k.emitted && now - s.mtimeMs >= this.settleMs && (k.stable || (prev && prev.size === sig.size))) k.stable = true;
-      if (!k.emitted && k.stable) events.push({ kind: 'added', name: rel });
+    // 1. New and not-yet-delivered files: always checked, whatever the folder size (this is the detection guarantee).
+    const fresh = [];
+    for (const rel of names) {
+      if (known[rel] && known[rel].emitted) continue;
+      const r = this._check(rel, now); result.checked++;
+      if (r === 'new') fresh.push(rel);
     }
-    const complete = scanned >= files.length;
-    this.cursor = complete ? 0 : i;
+    // 2. Delivered files: rotating window, bounded by the time budget, to spot modifications.
+    const freshSet = new Set(fresh);
+    const done = names.filter((f) => known[f] && known[f].emitted && !freshSet.has(f));
+    let i = this.cursor >= done.length ? 0 : this.cursor, n = 0;
+    for (; n < done.length; n++, i = (i + 1) % done.length) {
+      if (n > 0 && n % 200 === 0 && Date.now() > deadline) break;
+      if (this._check(done[i], now) === 'modified') { result.modified++; this.store.log('folder', 'ok', { monitor: this.name, event: 'modified', path: path.join(this.dir, done[i]) }); }
+      result.checked++;
+    }
+    result.complete = n >= done.length;
+    this.cursor = result.complete ? 0 : i;
 
-    // Deletions / renames only after a complete pass.
-    const removed = [];
-    if (complete) for (const rel of Object.keys(known)) if (!seen.has(rel)) removed.push(rel);
-    const renamed = [];
-    for (const rel of removed) {
+    // 3. Deletions and renames come from the full listing, so they are exact on every poll.
+    for (const rel of Object.keys(known)) {
+      if (present.has(rel)) continue;
       const old = known[rel];
-      const to = fresh.find((n) => known[n].ino === old.ino && known[n].size === old.size && !renamed.some((r) => r.to === n));
-      if (to && old.emitted) { renamed.push({ from: rel, to }); known[to].emitted = true; }
-      delete known[rel];
+      const to = fresh.find((f) => known[f].ino === old.ino && known[f].size === old.size);
+      if (to && old.emitted) {
+        Object.assign(known[to], { emitted: true, stable: true }); fresh.splice(fresh.indexOf(to), 1); result.renamed++;
+        this.store.log('folder', 'ok', { monitor: this.name, event: 'renamed', from: rel, to });
+      } else {
+        result.removed++;
+        this.store.log('folder', 'ok', { monitor: this.name, event: 'removed', path: path.join(this.dir, rel) });
+      }
+      delete known[rel]; this.queued.delete(rel);
     }
 
-    const result = { added: 0, modified: 0, removed: removed.length - renamed.length, renamed: renamed.length, failed: 0, scanned: files.length, complete };
-    for (const r of renamed) this.store.log('folder', 'ok', { monitor: this.name, event: 'renamed', from: r.from, to: r.to });
-    for (const e of events) {
-      if (e.kind === 'modified') { result.modified++; this.store.log('folder', 'ok', { monitor: this.name, event: 'modified', path: e.name }); continue; }
-      const k = known[e.name];
-      if (k.emitted) continue;
-      const abs = path.join(this.dir, e.name);
-      try {
-        const out = await this.action({ kind: 'added', monitor: this.name, name: e.name, path: abs, size: k.size });
-        k.emitted = true; result.added++;
-        this.store.log('folder', 'ok', { monitor: this.name, event: 'added', path: abs, size: k.size, action: out ?? undefined });
-      } catch (err) {
-        k.attempts = (k.attempts || 0) + 1; result.failed++;
-        if (k.attempts >= this.maxActionAttempts) k.emitted = true; // give up; do not loop forever
-        this.store.log('folder', 'failed', { monitor: this.name, event: 'added', path: abs, error: errText(err), attempts: k.attempts, gaveUp: k.emitted });
-      }
+    // 4. Queue settled, undelivered files and start actions on the worker pool.
+    for (const rel of names) {
+      const k = known[rel];
+      if (!k || k.emitted || !k.stable || this.queued.has(rel) || this.active.has(rel)) continue;
+      this.queue.push(rel); this.queued.add(rel); result.detected++;
+      this.store.log('folder', 'ok', { monitor: this.name, event: 'detected', path: path.join(this.dir, rel), size: k.size, detectedInMs: Math.max(0, now - Math.round(k.mtimeMs)) });
     }
-    for (const rel of removed) if (!renamed.some((r) => r.from === rel)) this.store.log('folder', 'ok', { monitor: this.name, event: 'removed', path: path.join(this.dir, rel) });
-    this.store.setCheckpoint(this.id, { files: known, updatedAt: new Date().toISOString() });
+    this.first = false;
+    this._pump(result);
+    if (this.queueDepth) {
+      let waiter;
+      const idle = new Promise((resolve) => { waiter = resolve; this.idleWaiters.push(resolve); });
+      await Promise.race([idle, sleep(Math.max(0, this.actionWaitMs - (Date.now() - t0)))]);
+      this.idleWaiters = this.idleWaiters.filter((w) => w !== waiter);
+    }
+    this._save();
+    result.queued = this.queueDepth;
     return result;
+  }
+
+  _pump(result) {
+    while (!this.paused && this.active.size < this.concurrency && this.queue.length) {
+      const rel = this.queue.shift(); this.queued.delete(rel);
+      const k = this.known[rel];
+      if (!k || k.emitted) continue;
+      const p = this._deliver(rel, k, result).finally(() => {
+        this.active.delete(rel); this._saveSoon(); this._pump(result);
+        if (!this.queueDepth) for (const w of this.idleWaiters.splice(0)) w();
+      });
+      this.active.set(rel, p);
+    }
+  }
+
+  async _deliver(rel, k, result) {
+    const abs = path.join(this.dir, rel);
+    try {
+      const out = await this.action({ kind: 'added', monitor: this.name, name: rel, path: abs, size: k.size });
+      k.emitted = true; result.added++;
+      this.store.log('folder', 'ok', { monitor: this.name, event: 'added', path: abs, size: k.size, action: out ?? undefined });
+    } catch (err) {
+      k.attempts = (k.attempts || 0) + 1; result.failed++;
+      if (k.attempts >= this.maxActionAttempts) k.emitted = true; // give up; do not loop forever
+      this.store.log('folder', 'failed', { monitor: this.name, event: 'added', path: abs, error: errText(err), attempts: k.attempts, gaveUp: k.emitted });
+    }
+  }
+
+  /** Wait for running actions (used by Agent.stop); queued ones resume on the next poll. */
+  async drain() {
+    this.paused = true;
+    try { await Promise.allSettled([...this.active.values()]); } finally { this.paused = false; if (this.known) this._save(); }
   }
 }
 
 const mtimeOf = (modify) => modify || null;
+const sameLocal = (rec, st) => Boolean(rec && rec.local && st && rec.local.size === st.size && rec.local.mtimeMs === st.mtimeMs);
+const sameRemote = (rec, f) => Boolean(rec && f && rec.size === f.size && rec.modify === mtimeOf(f.modify));
 
 export class FtpMonitor {
   /**
-   * Syncs remoteDir <-> localDir. direction: 'download' | 'upload' | 'both'. Never overwrites a local file we did not
-   * write (reported as a conflict), downloads to name.part and renames only when the byte count matches, and
-   * remembers what it transferred so nothing is retransferred.
+   * Syncs remoteDir <-> localDir on the agent's schedule. direction: 'download' | 'upload' | 'both'.
+   * secure: false | 'explicit' (AUTH TLS) | 'implicit'; certificates are verified unless tlsOptions says otherwise.
+   * Each file's last synced state is kept in SQLite: remote size + MLSD modify time and local size + mtime.
+   *  - Downloads go to name.part and are renamed only when the byte count matches; uploads go to name.part then RNTO.
+   *  - A file is skipped only when BOTH sides still match that record, so a remote change (even with the same size),
+   *    a deleted local copy (download) or a deleted remote copy (upload) is transferred again.
+   *  - A copy this sync did not write, or that changed on both sides, is never overwritten: it is logged as a conflict.
+   * Every poll opens a fresh connection (reconnect after network failures is automatic); a failure fails the poll so
+   * the agent's retries and backoff apply. Aborting the poll (agent stop or timeout) closes the connection.
    */
-  constructor({ name, store, host, port, user, password, secure = false, remoteDir = '.', localDir, direction = 'download', intervalMs = 60000, retries = 2, timeoutMs, tlsOptions, settleMs = 1000, client }) {
-    Object.assign(this, { name, store, remoteDir, localDir: path.resolve(localDir), direction, intervalMs, retries, settleMs });
+  constructor({ name, store, host, port, user, password, secure = false, remoteDir = '.', localDir, direction = 'download', intervalMs = 60000, retries = 2, timeoutMs, tlsOptions, settleMs = 1000, pollTimeoutMs = 0, client }) {
+    Object.assign(this, { name, store, remoteDir, localDir: path.resolve(localDir), direction, intervalMs, retries, settleMs, timeoutMs: pollTimeoutMs });
     this.id = 'ftp:' + name; this.type = 'ftp';
     this.makeClient = client || (() => new FtpClient({ host, port, user, password, secure, timeoutMs, tlsOptions }));
   }
 
-  async poll() {
+  _remote(name) { return this.remoteDir.replace(/\/$/, '') + '/' + name; }
+
+  async poll(ctx = {}) {
     fs.mkdirSync(this.localDir, { recursive: true });
     const state = this.store.getCheckpoint(this.id, { files: {} });
     const files = state.files;
     const c = this.makeClient();
+    const onAbort = () => { c.close().catch(() => {}); };
+    if (ctx.signal) { if (ctx.signal.aborted) throw new Error('aborted'); ctx.signal.addEventListener('abort', onAbort, { once: true }); }
     const res = { downloaded: 0, uploaded: 0, skipped: 0, failed: 0 };
     const errors = [];
     const fail = (name, op, e) => { res.failed++; errors.push(name + ': ' + errText(e)); this.store.log('ftp', 'failed', { monitor: this.name, op, file: name, error: errText(e) }); };
+    const skip = (name, op, reason) => { res.skipped++; this.store.log('ftp', 'skipped', { monitor: this.name, op, file: name, reason }); };
+    const save = () => this.store.setCheckpoint(this.id, { files, updatedAt: new Date().toISOString() });
+    const lstat = (p) => { try { return fs.statSync(p); } catch { return null; } };
     try {
       await c.connect();
-      const remote = await c.list(this.remoteDir);
+      const remote = (await c.list(this.remoteDir)).filter((f) => /^[^/\\]+$/.test(f.name) && !f.name.startsWith('.') && !f.name.endsWith('.part')); // never escape localDir
       const rmap = new Map(remote.map((f) => [f.name, f]));
       if (this.direction !== 'upload') {
         for (const f of remote) {
-          if (!/^[^/\\]+$/.test(f.name) || f.name.startsWith('.') || f.name.endsWith('.part')) continue; // never escape localDir
           const rec = files[f.name]; const local = path.join(this.localDir, f.name);
-          const unchanged = rec && rec.size === f.size && (rec.modify == null || rec.modify === mtimeOf(f.modify));
-          if (unchanged) continue;
-          let st = null; try { st = fs.statSync(local); } catch { /* absent */ }
-          if (st && !(rec && rec.local && rec.local.size === st.size && rec.local.mtimeMs === st.mtimeMs)) {
-            res.skipped++; this.store.log('ftp', 'skipped', { monitor: this.name, op: 'download', file: f.name, reason: 'local file exists and was not written by this sync' }); continue;
+          const st = lstat(local);
+          const remoteSame = sameRemote(rec, f), localSame = sameLocal(rec, st);
+          if (remoteSame && localSame) continue; // in sync
+          if (remoteSame && st) { // only the local copy changed
+            if (this.direction === 'download') skip(f.name, 'download', 'local copy changed since last sync; not overwriting');
+            continue; // 'both': the upload pass sends it
           }
+          if (st && !localSame) { skip(f.name, 'download', rec ? 'changed on both sides since last sync (conflict)' : 'local file exists and was not written by this sync'); continue; }
           const tmp = local + '.part';
           try {
             const t0 = Date.now();
-            await c.download(this.remoteDir.replace(/\/$/, '') + '/' + f.name, tmp, f.size);
+            await c.download(this._remote(f.name), tmp, f.size);
             fs.renameSync(tmp, local);
             const ls = fs.statSync(local);
             files[f.name] = { size: f.size, modify: mtimeOf(f.modify), local: { size: ls.size, mtimeMs: ls.mtimeMs } };
-            res.downloaded++; this.store.log('ftp', 'ok', { monitor: this.name, op: 'download', file: f.name, bytes: f.size, ms: Date.now() - t0 });
-          } catch (e) { fs.rmSync(tmp, { force: true }); fail(f.name, 'download', e); }
+            save();
+            res.downloaded++; this.store.log('ftp', 'ok', { monitor: this.name, op: 'download', file: f.name, bytes: f.size, ms: Date.now() - t0, reason: rec ? (st ? 'remote changed' : 'local copy missing') : 'new' });
+          } catch (e) { fs.rmSync(tmp, { force: true }); fail(f.name, 'download', e); if (ctx.signal && ctx.signal.aborted) throw e; }
         }
       }
       if (this.direction !== 'download') {
+        const uploaded = [];
         for (const e of fs.readdirSync(this.localDir, { withFileTypes: true })) {
           if (!e.isFile() || e.name.startsWith('.') || e.name.endsWith('.part')) continue;
-          const local = path.join(this.localDir, e.name); const st = fs.statSync(local);
-          const rec = files[e.name];
-          if (rec && rec.local && rec.local.size === st.size && rec.local.mtimeMs === st.mtimeMs) continue; // already in sync (downloaded or uploaded)
-          if (Date.now() - st.mtimeMs < this.settleMs) continue; // probably still being written
-          if (rmap.has(e.name) && !(rec && rec.local)) { res.skipped++; this.store.log('ftp', 'skipped', { monitor: this.name, op: 'upload', file: e.name, reason: 'remote file exists and was not written by this sync' }); continue; }
-          const base = this.remoteDir.replace(/\/$/, '') + '/' + e.name;
+          const local = path.join(this.localDir, e.name); const st = lstat(local); if (!st) continue;
+          const rec = files[e.name]; const r = rmap.get(e.name);
+          const localSame = sameLocal(rec, st), remoteSame = sameRemote(rec, r);
+          if (localSame && remoteSame) continue; // in sync (downloaded or uploaded)
+          if (localSame && r) { // only the remote copy changed
+            if (this.direction === 'upload') skip(e.name, 'upload', 'remote copy changed since last sync; not overwriting');
+            continue; // 'both': the download pass handled it
+          }
+          if (!localSame && Date.now() - st.mtimeMs < this.settleMs) continue; // probably still being written
+          if (r && !remoteSame) { skip(e.name, 'upload', rec ? 'changed on both sides since last sync (conflict)' : 'remote file exists and was not written by this sync'); continue; }
           try {
-            const t0 = Date.now();
+            const t0 = Date.now(); const base = this._remote(e.name);
             await c.upload(local, base + '.part');
             await c.rename(base + '.part', base);
             files[e.name] = { size: st.size, modify: null, local: { size: st.size, mtimeMs: st.mtimeMs } };
-            res.uploaded++; this.store.log('ftp', 'ok', { monitor: this.name, op: 'upload', file: e.name, bytes: st.size, ms: Date.now() - t0 });
-          } catch (err) { fail(e.name, 'upload', err); }
+            save(); uploaded.push(e.name);
+            res.uploaded++; this.store.log('ftp', 'ok', { monitor: this.name, op: 'upload', file: e.name, bytes: st.size, ms: Date.now() - t0, reason: rec ? (r ? 'local changed' : 'remote copy missing') : 'new' });
+          } catch (err) { fail(e.name, 'upload', err); if (ctx.signal && ctx.signal.aborted) throw err; }
+        }
+        if (uploaded.length) {
+          // Record the server's own size and modify time for what we wrote, so later remote edits are recognised.
+          const after = new Map((await c.list(this.remoteDir)).map((f) => [f.name, f]));
+          for (const name of uploaded) { const f = after.get(name); if (f) Object.assign(files[name], { size: f.size, modify: mtimeOf(f.modify) }); }
         }
       }
     } catch (e) {
-      this.store.log('ftp', 'failed', { monitor: this.name, op: 'connect', error: errText(e) });
+      this.store.log('ftp', 'failed', { monitor: this.name, op: ctx.signal && ctx.signal.aborted ? 'aborted' : 'connect', error: errText(e) });
       throw e;
     } finally {
-      this.store.setCheckpoint(this.id, { files, updatedAt: new Date().toISOString() });
+      save();
+      if (ctx.signal) ctx.signal.removeEventListener('abort', onAbort);
       await c.close();
     }
     if (errors.length) throw new Error(errors.length + ' transfer(s) failed: ' + errors.join('; ').slice(0, 300));
@@ -196,29 +290,41 @@ const matches = (pattern, value) => pattern == null || (pattern instanceof RegEx
 
 export class ImapMonitor {
   /**
-   * Tracks (UIDVALIDITY, last UID) per mailbox in SQLite. rules: [{ name, from, subject, action }]; the first
-   * matching rule's action runs. A rule failure is logged and the message is still marked processed (no endless retries).
+   * Tracks (UIDVALIDITY, last UID) per mailbox in SQLite. rules: [{ name, from, subject, action }]; the first matching
+   * rule's action runs. Messages are acknowledged (lastUid advanced) one at a time, only after they were handled:
+   *  - a malformed message is logged and acknowledged (retrying cannot fix it);
+   *  - a failed rule action is NOT acknowledged: the poll stops at that message and fails, so the agent's retries and
+   *    later polls run it again. After maxRuleAttempts failures (counted in SQLite, across restarts) it is logged as
+   *    given up and acknowledged so one bad message cannot block the mailbox forever.
+   * A UIDVALIDITY change means the mailbox was rebuilt, so processing restarts from UID 1.
    */
-  constructor({ name, store, host, port, user, password, secure = true, mailbox = 'INBOX', rules = [], intervalMs = 60000, retries = 2, maxPerPoll = 200, timeoutMs, tlsOptions, client }) {
-    Object.assign(this, { name, store, mailbox, intervalMs, retries, maxPerPoll });
+  constructor({ name, store, host, port, user, password, secure = true, mailbox = 'INBOX', rules = [], intervalMs = 60000, retries = 2, maxPerPoll = 200, maxRuleAttempts = 5, timeoutMs, tlsOptions, pollTimeoutMs = 0, client }) {
+    Object.assign(this, { name, store, mailbox, intervalMs, retries, maxPerPoll, maxRuleAttempts, timeoutMs: pollTimeoutMs });
     this.id = 'imap:' + name; this.type = 'imap';
     this.rules = rules.map((r) => ({ name: r.name || 'rule', from: r.from, subject: r.subject, action: makeAction(r.action) }));
     this.makeClient = client || (() => new ImapClient({ host, port, user, password, secure, mailbox, timeoutMs, tlsOptions }));
   }
 
-  async poll() {
+  async poll(ctx = {}) {
     const c = this.makeClient();
+    const onAbort = () => { c.logout().catch(() => {}); };
+    if (ctx.signal) { if (ctx.signal.aborted) throw new Error('aborted'); ctx.signal.addEventListener('abort', onAbort, { once: true }); }
     const cp = this.store.getCheckpoint(this.id, { uidValidity: null, lastUid: 0 });
-    const res = { processed: 0, matched: 0, ignored: 0, malformed: 0, ruleFailures: 0 };
+    cp.failures = cp.failures || {}; // uid -> failed rule attempts for the message at the head of the queue
+    const save = () => this.store.setCheckpoint(this.id, { ...cp, updatedAt: new Date().toISOString() });
+    const res = { processed: 0, matched: 0, ignored: 0, malformed: 0, ruleFailures: 0, gaveUp: 0 };
+    let blocked = null;
     try {
       await c.connect();
       const box = await c.select(this.mailbox);
       if (cp.uidValidity !== null && cp.uidValidity !== box.uidValidity) {
         this.store.log('imap', 'reset', { monitor: this.name, reason: 'UIDVALIDITY changed', from: cp.uidValidity, to: box.uidValidity });
-        cp.lastUid = 0;
+        cp.lastUid = 0; cp.failures = {};
       }
       cp.uidValidity = box.uidValidity;
-      const uids = (await c.uidsFrom(cp.lastUid + 1)).slice(0, this.maxPerPoll);
+      const all = await c.uidsFrom(cp.lastUid + 1);
+      const uids = all.slice(0, this.maxPerPoll);
+      res.backlog = all.length - uids.length; // left for the next poll
       for (const uid of uids) {
         const raw = await c.fetchHeader(uid);
         const msg = parseHeader(raw);
@@ -228,19 +334,33 @@ export class ImapMonitor {
           const rule = this.rules.find((r) => matches(r.from, msg.from) && matches(r.subject, msg.subject));
           if (!rule) { res.ignored++; this.store.log('imap', 'ignored', entry); }
           else {
-            try { const out = await rule.action({ kind: 'email', uid, ...msg, rule: rule.name, monitor: this.name, name: msg.subject, path: '' }); res.matched++; this.store.log('imap', 'ok', { ...entry, rule: rule.name, action: out ?? undefined }); }
-            catch (e) { res.ruleFailures++; this.store.log('imap', 'failed', { ...entry, rule: rule.name, error: errText(e) }); }
+            try {
+              const out = await rule.action({ kind: 'email', uid, ...msg, rule: rule.name, monitor: this.name, name: msg.subject, path: '' });
+              res.matched++; this.store.log('imap', 'ok', { ...entry, rule: rule.name, action: out ?? undefined });
+            } catch (e) {
+              res.ruleFailures++;
+              const attempts = (cp.failures[uid] || 0) + 1;
+              const gaveUp = attempts >= this.maxRuleAttempts;
+              this.store.log('imap', 'failed', { ...entry, rule: rule.name, error: errText(e), attempts, gaveUp });
+              if (!gaveUp) { cp.failures = { [uid]: attempts }; save(); blocked = { uid, rule: rule.name, error: errText(e), attempts }; break; }
+              res.gaveUp++;
+            }
           }
         }
         res.processed++;
-        cp.lastUid = uid;
-        this.store.setCheckpoint(this.id, { ...cp, updatedAt: new Date().toISOString() }); // per message: a crash never reprocesses acknowledged mail
+        cp.lastUid = uid; delete cp.failures[uid];
+        save(); // per message: a crash never reprocesses acknowledged mail
       }
-      this.store.setCheckpoint(this.id, { ...cp, updatedAt: new Date().toISOString() });
+      save();
     } catch (e) {
-      this.store.log('imap', 'failed', { monitor: this.name, op: 'poll', error: errText(e) });
+      this.store.log('imap', 'failed', { monitor: this.name, op: ctx.signal && ctx.signal.aborted ? 'aborted' : 'poll', error: errText(e) });
       throw e;
-    } finally { await c.logout(); }
+    } finally {
+      if (ctx.signal) ctx.signal.removeEventListener('abort', onAbort);
+      await c.logout();
+    }
+    if (blocked) res.backlog = undefined;
+    if (blocked) throw new Error('rule ' + blocked.rule + ' failed on UID ' + blocked.uid + ' (attempt ' + blocked.attempts + ' of ' + this.maxRuleAttempts + '): ' + blocked.error);
     return res;
   }
 }

@@ -88,6 +88,16 @@ function migrate(db) {
   }
 }
 
+// SQLITE_CORRUPT (11) and SQLITE_NOTADB (26), including extended result codes.
+const CORRUPT_CODES = new Set([11, 26]);
+class CorruptDatabaseError extends Error {}
+
+/** True only for confirmed corruption. Locks, permissions, disk-full and migration errors are not corruption. */
+export function isCorruption(e) {
+  if (e instanceof CorruptDatabaseError) return true;
+  return Boolean(e && typeof e.errcode === 'number' && CORRUPT_CODES.has(e.errcode & 0xff));
+}
+
 function openRaw(file) {
   const db = new DatabaseSync(file);
   try {
@@ -95,18 +105,22 @@ function openRaw(file) {
     if (file !== ':memory:') db.exec('PRAGMA journal_mode = WAL');
     db.exec('PRAGMA synchronous = NORMAL');
     const check = db.prepare('PRAGMA integrity_check').all();
-    if (!(check.length === 1 && Object.values(check[0])[0] === 'ok')) throw new Error('integrity_check failed: ' + check.map((r) => Object.values(r)[0]).join('; '));
+    if (!(check.length === 1 && Object.values(check[0])[0] === 'ok')) throw new CorruptDatabaseError('integrity_check failed: ' + check.map((r) => Object.values(r)[0]).join('; '));
     migrate(db);
     return db;
   } catch (e) { try { db.close(); } catch { /* ignore */ } throw e; }
 }
 
-/** Open (and migrate) the database. A corrupt file is moved aside and replaced by a fresh one. */
+/**
+ * Open (and migrate) the database. Only a confirmed corrupt file (SQLITE_CORRUPT / SQLITE_NOTADB or a failed
+ * integrity_check) is moved aside and replaced by a fresh one; any other error (locked, permission denied,
+ * failed migration, newer schema) is rethrown so valid state is never discarded.
+ */
 export function openStore(file = ':memory:') {
   if (file !== ':memory:') fs.mkdirSync(path.dirname(path.resolve(file)), { recursive: true });
   try { return new Store(openRaw(file), file); }
   catch (e) {
-    if (file === ':memory:' || /newer than this agent/.test(e.message)) throw e;
+    if (file === ':memory:' || !isCorruption(e)) throw e;
     const aside = file + '.corrupt-' + Date.now();
     for (const ext of ['', '-wal', '-shm']) { try { fs.renameSync(file + ext, aside + ext); } catch { /* missing */ } }
     const store = new Store(openRaw(file), file, { reason: e.message, movedTo: aside });

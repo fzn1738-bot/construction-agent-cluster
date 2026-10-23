@@ -78,7 +78,9 @@ const server = http.createServer(async (req, res) => {
   } catch (e) { send(res, 400, { ok: false, message: e.message }); }
 });
 
-export function start(port = Number(process.env.PORT) || SPEC.port || 4100, host = process.env.HOST || '127.0.0.1') {
+export async function start(port = Number(process.env.PORT) || SPEC.port || 4100, host = process.env.HOST || '127.0.0.1') {
+  // Start the solution's own background work (e.g. a continuous loop) at boot, not on the first request.
+  if (typeof hooks.init === 'function') { try { await hooks.init(); } catch (e) { console.error('hooks.init failed:', e && e.message || e); } }
   return new Promise((resolve) => server.listen(port, host, () => resolve(server)));
 }
 if (process.argv[1] && fileURLToPath(import.meta.url) === path.resolve(process.argv[1])) {

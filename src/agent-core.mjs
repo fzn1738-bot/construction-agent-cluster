@@ -20,21 +20,30 @@ export class Agent extends EventEmitter {
     super();
     this.store = store; this.tickMs = tickMs; this.graceMs = graceMs;
     this.tasks = new Map(); this.inflight = new Map(); this.nextDue = new Map();
+    // id -> promise of an attempt that timed out but has not finished yet; no new attempt may start meanwhile.
+    this.lingering = new Map();
     this.running = false; this.timer = null; this.abort = null; this.startedAt = null;
   }
 
-  /** Register a task. run(ctx) gets { signal, attempt, trigger, log }. Failures retry `retries` times with exponential backoff. */
-  addTask({ id, run, intervalMs = 5000, retries = 0, backoffMs = 200, maxBackoffMs = 30000, timeoutMs = 0, kind = 'task' }) {
+  /**
+   * Register a task. run(ctx) gets { signal, attempt, trigger, log }. Failures retry `retries` times with exponential backoff.
+   * timeoutMs aborts ctx.signal when an attempt overruns; the agent then waits up to timeoutGraceMs for that attempt to
+   * actually finish before retrying. If it still has not finished the task is reported failed without a retry and stays
+   * locked until the old attempt settles, so two attempts of one task never overlap.
+   * drain(), if given, is awaited by stop() (e.g. a monitor's still-running actions).
+   */
+  addTask({ id, run, intervalMs = 5000, retries = 0, backoffMs = 200, maxBackoffMs = 30000, timeoutMs = 0, timeoutGraceMs = 5000, kind = 'task', drain = null }) {
     if (!id || typeof run !== 'function') throw new Error('task needs an id and a run function');
     if (this.tasks.has(id)) throw new Error('duplicate task id: ' + id);
-    this.tasks.set(id, { id, run, intervalMs, retries, backoffMs, maxBackoffMs, timeoutMs, kind });
+    this.tasks.set(id, { id, run, intervalMs, retries, backoffMs, maxBackoffMs, timeoutMs, timeoutGraceMs, kind, drain });
     if (this.running) this.nextDue.set(id, Date.now());
     return this;
   }
 
   /** Register a monitor from monitors.mjs as a task. */
   addMonitor(monitor, opts = {}) {
-    return this.addTask({ id: monitor.id, kind: monitor.type, intervalMs: monitor.intervalMs, retries: monitor.retries ?? 2, ...opts, run: (ctx) => monitor.poll(ctx) });
+    return this.addTask({ id: monitor.id, kind: monitor.type, intervalMs: monitor.intervalMs, retries: monitor.retries ?? 2, timeoutMs: monitor.timeoutMs || 0,
+      drain: typeof monitor.drain === 'function' ? () => monitor.drain() : null, ...opts, run: (ctx) => monitor.poll(ctx) });
   }
 
   log(level, message, details = {}) { this.emit('log', { level, message, details, at: new Date().toISOString() }); }
@@ -63,7 +72,7 @@ export class Agent extends EventEmitter {
     if (!this.running) return;
     const now = Date.now();
     for (const t of this.tasks.values()) {
-      if (this.inflight.has(t.id) || (this.nextDue.get(t.id) ?? 0) > now) continue;
+      if (this.inflight.has(t.id) || this.lingering.has(t.id) || (this.nextDue.get(t.id) ?? 0) > now) continue;
       this.runTask(t.id, 'schedule').catch(() => {});
     }
     this._schedule(this.tickMs);
@@ -73,7 +82,8 @@ export class Agent extends EventEmitter {
   async stop() {
     if (!this.running) return;
     this.running = false; clearTimeout(this.timer); this.abort.abort();
-    const pending = Promise.allSettled([...this.inflight.values()]);
+    const drains = [...this.tasks.values()].filter((t) => t.drain).map((t) => Promise.resolve().then(t.drain));
+    const pending = Promise.allSettled([...this.inflight.values(), ...this.lingering.values(), ...drains]);
     let timedOut = false;
     await Promise.race([pending, sleep(this.graceMs).then(() => { timedOut = true; })]);
     this.store.log('system', timedOut ? 'stopped-forced' : 'stopped', { inflight: [...this.inflight.keys()] });
@@ -85,6 +95,11 @@ export class Agent extends EventEmitter {
     const task = this.tasks.get(id);
     if (!task) return Promise.reject(new Error('unknown task: ' + id));
     if (this.inflight.has(id)) return this.inflight.get(id);
+    if (this.lingering.has(id)) {
+      const error = 'previous attempt timed out and is still finishing';
+      this.log('warn', 'task ' + id + ' skipped: ' + error);
+      return Promise.resolve({ id, status: 'failed', attempts: 0, error, skipped: true });
+    }
     const p = this._execute(task, trigger).finally(() => this.inflight.delete(id));
     this.inflight.set(id, p);
     return p;
@@ -105,7 +120,7 @@ export class Agent extends EventEmitter {
       this.log('info', 'task ' + task.id + ' running (attempt ' + attempt + ')');
       const t0 = Date.now();
       try {
-        result = await this._withTimeout(task, { signal, attempt, trigger, log: (m, d) => this.log('info', m, d) });
+        result = await this._attempt(task, signal, { attempt, trigger, log: (m, d) => this.log('info', m, d) });
         error = null;
         this.store.log(task.kind, 'ok', { task: task.id, attempt, trigger, ms: Date.now() - t0, result: summarise(result) });
         break;
@@ -113,7 +128,7 @@ export class Agent extends EventEmitter {
         error = String((e && e.message) || e);
         this.store.log(task.kind, 'failed', { task: task.id, attempt, trigger, ms: Date.now() - t0, error });
         this.log('error', 'task ' + task.id + ' failed: ' + error, { attempt });
-        if (attempt > task.retries || (signal && signal.aborted)) break;
+        if (attempt > task.retries || (signal && signal.aborted) || this.lingering.has(task.id)) break;
         await sleep(Math.min(task.backoffMs * 2 ** (attempt - 1), task.maxBackoffMs), signal);
         if (signal && signal.aborted) break;
       }
@@ -127,12 +142,33 @@ export class Agent extends EventEmitter {
     return { id: task.id, status, attempts: attempt, error: error || undefined, result };
   }
 
-  _withTimeout(task, ctx) {
-    const work = Promise.resolve().then(() => task.run(ctx));
-    if (!task.timeoutMs) return work;
-    let timer;
-    const limit = new Promise((_, rej) => { timer = setTimeout(() => rej(new Error('timed out after ' + task.timeoutMs + 'ms')), task.timeoutMs); });
-    return Promise.race([work, limit]).finally(() => clearTimeout(timer));
+  /** One attempt with its own abort signal (also aborted by stop()). On timeout: abort, then wait for it to really end. */
+  async _attempt(task, parent, ctx) {
+    const ac = new AbortController();
+    const onStop = () => ac.abort(new Error('agent stopping'));
+    if (parent) { if (parent.aborted) onStop(); else parent.addEventListener('abort', onStop, { once: true }); }
+    const work = Promise.resolve().then(() => task.run({ ...ctx, signal: ac.signal }));
+    try {
+      if (!task.timeoutMs) return await work;
+      const TIMEOUT = Symbol('timeout');
+      let timer;
+      const first = await Promise.race([work.then((v) => ({ v }), (e) => ({ e })), new Promise((r) => { timer = setTimeout(() => r(TIMEOUT), task.timeoutMs); })]);
+      clearTimeout(timer);
+      if (first !== TIMEOUT) { if ('e' in first) throw first.e; return first.v; }
+      const msg = 'timed out after ' + task.timeoutMs + 'ms';
+      ac.abort(new Error(msg));
+      const settled = work.then(() => {}, () => {});
+      let graceTimer;
+      const ended = await Promise.race([settled.then(() => true), new Promise((r) => { graceTimer = setTimeout(() => r(false), task.timeoutGraceMs); })]);
+      clearTimeout(graceTimer);
+      if (!ended) {
+        // Ignored the abort: hold the task until the attempt really finishes so nothing overlaps it.
+        const hold = settled.finally(() => { this.lingering.delete(task.id); this.log('info', 'task ' + task.id + ': timed-out attempt finished'); });
+        this.lingering.set(task.id, hold);
+        throw new Error(msg + '; attempt is still running, no retry until it finishes');
+      }
+      throw new Error(msg);
+    } finally { if (parent) parent.removeEventListener('abort', onStop); }
   }
 
   /** Current state loaded from SQLite plus live in-flight info. */
@@ -140,7 +176,7 @@ export class Agent extends EventEmitter {
     const persisted = new Map(this.store.listTasks().map((t) => [t.id, t]));
     return {
       running: this.running, startedAt: this.startedAt, active: this.inflight.size,
-      tasks: [...this.tasks.values()].map((t) => ({ id: t.id, kind: t.kind, intervalMs: t.intervalMs, inflight: this.inflight.has(t.id), state: persisted.get(t.id) || null }))
+      tasks: [...this.tasks.values()].map((t) => ({ id: t.id, kind: t.kind, intervalMs: t.intervalMs, inflight: this.inflight.has(t.id), lingering: this.lingering.has(t.id), nextDue: this.nextDue.has(t.id) ? new Date(this.nextDue.get(t.id)).toISOString() : null, state: persisted.get(t.id) || null }))
     };
   }
 }

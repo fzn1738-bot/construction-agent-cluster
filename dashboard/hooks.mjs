@@ -1,7 +1,8 @@
 // The solution's dashboard logic, backed by the agent's SQLite state.
 //   status()   -> { mood, headline, detail, primary, ring }     metrics() / panels() / reports() / run(id)
 // Config: AGENT_CONFIG (default ./agent.config.json, optional). Database: AGENT_DB (default dashboard/data/agent.db).
-// With monitors configured the continuous loop runs inside the dashboard process; without any, Run Now just reports 0 tasks.
+// init() is called by server.mjs at startup, so with monitors configured the continuous loop runs inside the dashboard
+// process from boot, not from the first page view. Without monitors, Run Now fails and says what to configure.
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -25,12 +26,26 @@ function runtime() {
   let config = {}; let configError = null;
   try { if (fs.existsSync(cfgFile)) config = JSON.parse(fs.readFileSync(cfgFile, 'utf8')); } catch (e) { configError = 'agent.config.json: ' + e.message; }
   const agent = new Agent({ store, tickMs: config.tickMs || 250 });
-  try { for (const m of buildMonitors(config, store)) agent.addMonitor(m); } catch (e) { configError = e.message; }
+  const monitors = new Map();
+  try { for (const m of buildMonitors(config, store)) { agent.addMonitor(m); monitors.set(m.id, m); } } catch (e) { configError = e.message; }
   agent.on('log', (l) => { if (l.level === 'error') store.log('system', 'error', { message: l.message }); });
-  rt = { store, agent, configError, stopped: false };
+  rt = { store, agent, monitors, configError };
   if (agent.tasks.size && process.env.AGENT_AUTOSTART !== '0') agent.start().catch((e) => { rt.configError = e.message; });
-  process.once('SIGTERM', () => agent.stop().finally(() => process.exit(0)));
+  for (const sig of ['SIGTERM', 'SIGINT']) process.once(sig, () => agent.stop().finally(() => process.exit(0)));
   return rt;
+}
+
+/** Stop the loop (waiting for in-flight work) and close the database. */
+export async function shutdown() {
+  if (!rt) return;
+  const { agent, store } = rt; rt = null;
+  await agent.stop(); store.close();
+}
+
+/** Called once by server.mjs when it starts listening: opens the store and starts the loop. */
+export async function init() {
+  const { agent, configError } = runtime();
+  return { tasks: agent.tasks.size, running: agent.running, configError };
 }
 
 const rel = (iso) => {
@@ -38,6 +53,18 @@ const rel = (iso) => {
   return s < 60 ? s + 's ago' : s < 3600 ? Math.floor(s / 60) + ' min ago' : s < 86400 ? Math.floor(s / 3600) + ' h ago' : Math.floor(s / 86400) + ' d ago';
 };
 const TASK_TYPES = ['task', 'folder', 'ftp', 'imap'];
+const MON_KIND = { folder: 'Folder', ftp: 'FTP', imap: 'Email' };
+const monitorRows = ({ agent, monitors }) => agent.snapshot().tasks.map((t) => {
+  const st = t.state; const m = monitors.get(t.id);
+  const state = t.lingering ? { text: 'Stuck', tone: 'bad' } : t.inflight ? { text: 'Running', tone: 'run' }
+    : !st ? { text: 'Waiting', tone: 'wait' } : st.status === 'ok' ? { text: 'OK', tone: 'ok' }
+    : st.status === 'failed' ? { text: 'Failed', tone: 'bad' } : { text: st.status[0].toUpperCase() + st.status.slice(1), tone: 'wait' };
+  const last = st && (st.details.lastRunAt || st.timestamp);
+  const r = (st && st.details.result) || {};
+  // Queue depth: folder files awaiting their action; email messages left past maxPerPoll; FTP transfers that failed.
+  const queue = m && typeof m.queueDepth === 'number' ? m.queueDepth : t.kind === 'imap' ? Number(r.backlog || 0) : t.kind === 'ftp' ? Number(r.failed || 0) : 0;
+  return [MON_KIND[t.kind] + ' · ' + t.id.slice(t.id.indexOf(':') + 1), state, last ? rel(last) : 'never', queue];
+});
 const taskRuns = (store, limit = 100) => store.db.prepare("SELECT * FROM sync_log WHERE type IN ('folder','ftp','imap','task') AND json_extract(details, '$.attempt') IS NOT NULL ORDER BY timestamp DESC, id DESC LIMIT ?").all(limit).map((r) => ({ ...r, details: JSON.parse(r.details) }));
 
 export async function status() {
@@ -76,21 +103,26 @@ export async function metrics() {
   ];
 }
 
+const WARN = new Set(['skipped', 'malformed', 'interrupted', 'reset', 'stopped-forced', 'recovered']);
+const level = (st) => (st === 'failed' || st === 'error' ? 'error' : WARN.has(st) ? 'warn' : 'info');
+
 export async function panels() {
   const { store } = runtime();
   const runs = taskRuns(store, 10);
-  const logs = store.recentLogs({ limit: 12 });
-  const line = (l) => [(l.details.task || l.details.monitor || l.type) + ': ' + (l.details.event || l.details.op || l.details.error || l.details.note || l.status) + (l.details.path ? ' ' + path.basename(l.details.path) : l.details.file ? ' ' + l.details.file : l.details.subject ? ' ' + l.details.subject : ''), rel(l.timestamp) + ' · ' + (l.status === 'failed' || l.status === 'error' ? 'error' : l.status === 'ok' ? 'info' : 'warn')];
+  // Events (files, transfers, emails, errors), not the routine successful poll of every task: those are Recent Runs.
+  const logs = store.db.prepare("SELECT * FROM sync_log WHERE NOT (status = 'ok' AND json_extract(details, '$.attempt') IS NOT NULL) ORDER BY timestamp DESC, id DESC LIMIT 12").all().map((r) => ({ ...r, details: JSON.parse(r.details) }));
+  const line = (l) => [(l.details.task || l.details.monitor || l.type) + ': ' + (l.details.event || l.details.op || l.details.error || l.details.note || l.status) + (l.details.path ? ' ' + path.basename(l.details.path) : l.details.file ? ' ' + l.details.file : l.details.subject ? ' ' + l.details.subject : ''), rel(l.timestamp) + ' · ' + level(l.status)];
   return [
     { title: 'Recent Runs', kind: 'table', columns: ['Task', 'Status', 'Time'], rows: runs.map((r) => [r.details.task, r.status === 'ok' ? 'OK' : 'Failed (try ' + r.details.attempt + ')', rel(r.timestamp)]) },
-    { title: 'System Logs', kind: 'list', columns: ['Timestamp', 'Level', 'Message'], rows: logs.map(line) }
+    { title: 'System Logs', kind: 'list', columns: ['Timestamp', 'Level', 'Message'], rows: logs.map(line) },
+    { title: 'Monitors', kind: 'table', columns: ['Monitor', 'State', 'Last run', 'Queue'], rows: monitorRows(runtime()) }
   ];
 }
 
 export async function run(id) {
   if (id !== 'run') return { ok: false, message: 'Unknown action' };
   const { agent } = runtime();
-  if (!agent.tasks.size) return { ok: true, message: 'No monitors configured: nothing to run' };
+  if (!agent.tasks.size) return { ok: false, message: 'No monitors configured: add agent.config.json (see agent.config.example.json), then restart the dashboard' };
   const results = await agent.runAll('manual');
   const failed = results.filter((r) => r.status !== 'ok');
   return { ok: failed.length === 0, message: results.length + ' task(s) run, ' + failed.length + ' failed' + (failed.length ? ': ' + failed.map((f) => f.id + ' (' + f.error + ')').join('; ').slice(0, 300) : ''), output: results.map(({ id: i, status, attempts }) => ({ id: i, status, attempts })) };

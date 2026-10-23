@@ -67,6 +67,13 @@
     return svg;
   }
 
+  // A table cell: number (mono, right-aligned), { text, tone } state chip (colour plus text), or plain text.
+  const TONE = { ok: 'ok', run: 'run', wait: 'warn', warn: 'warn', bad: 'bad' };
+  const cell = (c) => {
+    if (c && typeof c === 'object' && 'text' in c) return h('td', {}, h('span', { class: 'chip ' + (TONE[c.tone] || ''), text: c.text }));
+    return h('td', { class: typeof c === 'number' ? 'num' : null, text: fmt(c), title: typeof c === 'string' && c.length > 40 ? c : null });
+  };
+
   function panel(p) {
     const box = h('div', { class: 'panel' }, h('h2', { text: p.title || 'Panel' }));
     if (p.kind === 'line' || p.kind === 'bar') {
@@ -76,7 +83,7 @@
       box.append((p.rows || []).length ? h('ul', { class: 'rlist' }, (p.rows || []).slice(0, 12).map((r) => h('li', {}, h('span', { text: Array.isArray(r) ? r[0] : r }), Array.isArray(r) && r[1] != null ? h('small', { text: r[1] }) : null))) : h('p', { class: 'empty', text: 'Nothing yet.' }));
     } else {
       const cols = p.columns || [];
-      box.append((p.rows || []).length ? h('div', { class: 'tablewrap' }, h('table', {}, h('thead', {}, h('tr', {}, cols.map((c) => h('th', { text: c })))), h('tbody', {}, (p.rows || []).slice(0, 25).map((r) => h('tr', {}, (Array.isArray(r) ? r : cols.map((c) => r[c])).map((c) => h('td', { class: typeof c === 'number' ? 'num' : null, text: fmt(c) }))))))) : h('p', { class: 'empty', text: 'Nothing yet.' }));
+      box.append((p.rows || []).length ? h('div', { class: 'tablewrap' }, h('table', {}, h('thead', {}, h('tr', {}, cols.map((c) => h('th', { text: c })))), h('tbody', {}, (p.rows || []).slice(0, 25).map((r) => h('tr', {}, (Array.isArray(r) ? r : cols.map((c) => r[c])).map(cell)))))) : h('p', { class: 'empty', text: 'Nothing yet.' }));
     }
     return box;
   }
