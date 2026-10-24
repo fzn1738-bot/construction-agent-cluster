@@ -9,7 +9,7 @@ let seed = [...String(SPEC.title || 'x')].reduce((a, c) => a + c.charCodeAt(0), 
 const rnd = () => { seed = (seed * 16807) % 2147483647; return (seed % 1000) / 1000; };
 const series = (n, base, wiggle) => Array.from({ length: n }, (_, i) => Math.max(0, Math.round((base + (rnd() - 0.4) * wiggle + i * wiggle * 0.08) * 10) / 10));
 
-export const actions = (SPEC.actions || [{ id: 'run', label: 'Run now' }]).map((a, i) => ({ id: a.id || 'action' + i, label: a.label || 'Run', description: a.description || '', input: a.input || null }));
+export const actions = (SPEC.actions || [{ id: 'run', label: 'Run now' }]).map((a, i) => ({ id: a.id || 'action' + i, label: a.label || 'Run', description: a.description || '', input: a.input || null, ...(a.pane ? { pane: a.pane } : {}), ...(a.adminOnly ? { adminOnly: true } : {}) }));
 
 export async function status() {
   const o = SPEC.orb || {};
@@ -22,23 +22,26 @@ export async function status() {
 }
 
 export async function metrics() {
-  return (SPEC.metrics || []).slice(0, 8).map((m) => {
+  return (SPEC.metrics || []).slice(0, 12).map((m) => {
     const [base, wig] = m.unit === '%' ? [82 + rnd() * 10, 6] : /^(d|days?)$/.test(m.unit || '') ? [8 + rnd() * 20, 4] : m.unit === 's' ? [1 + rnd() * 3, 0.8] : m.unit === 'ms' ? [120 + rnd() * 200, 60] : m.unit === '$' ? [20 + rnd() * 200, 30] : [10 + rnd() * 90, 14];
     const t = series(14, base, wig).map((v) => (m.unit === '%' ? Math.min(v, 100) : v));
-    return { key: m.key || m.label, label: m.label, value: m.sample ?? t[t.length - 1], unit: m.unit || '', trend: t, good: m.good || 'up' };
+    return { key: m.key || m.label, label: m.label, value: m.sample ?? t[t.length - 1], unit: m.unit || '', trend: t, good: m.good || 'up', ...(m.pane ? { pane: m.pane } : {}) };
   });
 }
 
 export async function panels() {
-  return (SPEC.panels || []).slice(0, 6).map((p) => {
+  // a pane with nothing listed still shows something in the mockup: a sample table of its recent items
+  const listed = new Set((SPEC.panes || []).flatMap((p) => p.panels || []));
+  const extra = (SPEC.panes || []).filter((p) => !(p.panels || []).length).map((p) => ({ title: p.title + ': recent', kind: 'table', fields: ['Item', 'Status', 'Updated'], pane: p.id }));
+  return [...(SPEC.panels || []).slice(0, 12), ...extra].map((p) => {
     const kind = ['line', 'bar', 'table', 'list'].includes(p.kind) ? p.kind : 'table';
     if (kind === 'line' || kind === 'bar') {
       const labels = Array.from({ length: kind === 'bar' ? 6 : 12 }, (_, i) => (p.labels && p.labels[i]) || (kind === 'bar' ? 'Item ' + (i + 1) : 'D' + (i + 1)));
-      return { title: p.title, kind, labels, series: [{ name: (p.fields && p.fields[0]) || p.title, values: series(labels.length, 30 + rnd() * 50, 25) }] };
+      return { title: p.title, kind, labels, series: [{ name: (p.fields && p.fields[0]) || p.title, values: series(labels.length, 30 + rnd() * 50, 25) }], ...(p.pane ? { pane: p.pane } : {}) };
     }
     const cols = (p.fields && p.fields.length ? p.fields : ['Name', 'Status', 'Updated']).slice(0, 5);
     const rows = Array.from({ length: 5 }, (_, r) => cols.map((c, i) => (i === 0 ? c + ' ' + (r + 1) : /status|state/i.test(c) ? ['OK', 'Running', 'OK', 'Queued', 'OK'][r] : /time|date|updated|at$/i.test(c) ? (r + 1) * 7 + ' min ago' : String(Math.round(rnd() * 900) / 10))));
-    return { title: p.title, kind, columns: cols, rows };
+    return { title: p.title, kind, columns: cols, rows, ...(p.pane ? { pane: p.pane } : {}) };
   });
 }
 

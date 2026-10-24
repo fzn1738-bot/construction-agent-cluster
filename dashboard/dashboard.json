@@ -1,6 +1,6 @@
 {
   "title": "Construction Agent Dashboard",
-  "tagline": "Monitor and control your construction agent operations",
+  "tagline": "Is the agent alive and keeping up?",
   "orb": {
     "headline": "Healthy",
     "metric": "Active Tasks",
@@ -33,6 +33,66 @@
       "label": "Sync Rate",
       "unit": "%",
       "good": "up"
+    },
+    {
+      "key": "avgRunMs",
+      "label": "Avg Run Time",
+      "unit": "ms",
+      "good": "down"
+    },
+    {
+      "key": "folderQueue",
+      "label": "Files Waiting",
+      "unit": "count",
+      "good": "down"
+    },
+    {
+      "key": "folderEvents",
+      "label": "Folder Events",
+      "unit": "count",
+      "good": "up"
+    },
+    {
+      "key": "ftpTransfers",
+      "label": "FTP Transfers",
+      "unit": "count",
+      "good": "up"
+    },
+    {
+      "key": "ftpFailed",
+      "label": "FTP Failures",
+      "unit": "count",
+      "good": "down"
+    },
+    {
+      "key": "emailsProcessed",
+      "label": "Emails Processed",
+      "unit": "count",
+      "good": "up"
+    },
+    {
+      "key": "emailBacklog",
+      "label": "Email Backlog",
+      "unit": "count",
+      "good": "down"
+    },
+    {
+      "key": "stateRows",
+      "label": "Log Rows",
+      "unit": "count",
+      "good": "up"
+    },
+    {
+      "key": "stateHealth",
+      "label": "Database Integrity",
+      "unit": "%",
+      "good": "up"
+    },
+    {
+      "key": "staleMonitors",
+      "label": "Stale Monitors",
+      "unit": "count",
+      "good": "down"
     }
   ],
   "panels": [
@@ -63,6 +123,45 @@
         "Last run",
         "Queue"
       ]
+    },
+    {
+      "title": "Folder Activity",
+      "kind": "table",
+      "fields": [
+        "Folder",
+        "Event",
+        "File",
+        "Time"
+      ]
+    },
+    {
+      "title": "FTP Activity",
+      "kind": "table",
+      "fields": [
+        "Site",
+        "Operation",
+        "File",
+        "Status",
+        "Time"
+      ]
+    },
+    {
+      "title": "Email Activity",
+      "kind": "table",
+      "fields": [
+        "Mailbox",
+        "Subject",
+        "Result",
+        "Time"
+      ]
+    },
+    {
+      "title": "State Tables",
+      "kind": "table",
+      "fields": [
+        "Table",
+        "Rows"
+      ]
     }
   ],
   "actions": [
@@ -71,11 +170,163 @@
       "label": "Run Now",
       "description": "Manually trigger all scheduled tasks",
       "input": null
+    },
+    {
+      "id": "run-folders",
+      "label": "Poll folders now",
+      "description": "Poll every watched folder once",
+      "input": null
+    },
+    {
+      "id": "run-ftp",
+      "label": "Sync FTP now",
+      "description": "Run every FTP sync once",
+      "input": null
+    },
+    {
+      "id": "run-imap",
+      "label": "Check email now",
+      "description": "Poll every mailbox once",
+      "input": null
+    },
+    {
+      "id": "run-monitor",
+      "label": "Run one monitor",
+      "description": "Run a single monitor by id, e.g. folder:drawings",
+      "input": {
+        "label": "Monitor id",
+        "placeholder": "folder:drawings"
+      },
+      "adminOnly": true
+    },
+    {
+      "id": "check-state",
+      "label": "Check database",
+      "description": "Run the SQLite integrity check",
+      "input": null
     }
   ],
   "reports": [
     "Task History",
     "Sync Performance"
+  ],
+  "panes": [
+    {
+      "id": "loop",
+      "title": "Continuous Loop",
+      "summary": "The scheduler: runs, success rate and run times",
+      "feature": "F1",
+      "metrics": [
+        "activeTasks",
+        "syncRate",
+        "avgRunMs",
+        "staleMonitors"
+      ],
+      "panels": [
+        "Recent Runs",
+        "Monitors",
+        "System Logs"
+      ],
+      "actions": [
+        "run",
+        "run-monitor"
+      ],
+      "client": true
+    },
+    {
+      "id": "folders",
+      "title": "Local Folder Polling",
+      "summary": "Watched folders, files waiting and what was handled",
+      "feature": "F2",
+      "metrics": [
+        "folderQueue",
+        "folderEvents"
+      ],
+      "panels": [
+        "Folder Activity"
+      ],
+      "actions": [
+        "run-folders"
+      ],
+      "client": true
+    },
+    {
+      "id": "ftp",
+      "title": "FTP Client Sync",
+      "summary": "Uploads and downloads against remote sites",
+      "feature": "F3",
+      "metrics": [
+        "ftpTransfers",
+        "ftpFailed"
+      ],
+      "panels": [
+        "FTP Activity"
+      ],
+      "actions": [
+        "run-ftp"
+      ],
+      "client": true
+    },
+    {
+      "id": "email",
+      "title": "IMAP Email Polling",
+      "summary": "Mailboxes, processed emails and backlog",
+      "feature": "F4",
+      "metrics": [
+        "emailsProcessed",
+        "emailBacklog"
+      ],
+      "panels": [
+        "Email Activity"
+      ],
+      "actions": [
+        "run-imap"
+      ],
+      "client": true
+    },
+    {
+      "id": "state",
+      "title": "SQLite State",
+      "summary": "Persisted state, row counts and integrity",
+      "feature": "F4",
+      "metrics": [
+        "stateRows",
+        "stateHealth"
+      ],
+      "panels": [
+        "State Tables"
+      ],
+      "actions": [
+        "check-state"
+      ],
+      "client": true
+    }
+  ],
+  "settings": [
+    {
+      "key": "staleAfterMin",
+      "label": "Stale after (minutes)",
+      "type": "number",
+      "default": 30,
+      "help": "A monitor with no run for this long counts as stale.",
+      "group": "Monitoring"
+    },
+    {
+      "key": "recentRows",
+      "label": "Rows per activity panel",
+      "type": "number",
+      "default": 12,
+      "help": "How many recent entries each panel lists.",
+      "group": "Monitoring"
+    },
+    {
+      "key": "successTarget",
+      "label": "Sync rate target (%)",
+      "type": "number",
+      "default": 90,
+      "help": "The orb turns amber below this success rate.",
+      "group": "Monitoring"
+    }
   ],
   "repo": "construction-agent-cluster",
   "port": 4102

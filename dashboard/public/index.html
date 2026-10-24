@@ -9,59 +9,118 @@
 <link rel="stylesheet" href="theme.css">
 </head>
 <body>
-<header class="top">
-  <div class="brand"><span class="dot" aria-hidden="true"></span><div><h1 id="appName">Dashboard</h1><p id="tagline" class="tag"></p></div></div>
-  <div class="top-r">
-    <span class="live" id="live">Live</span>
-    <button class="iconbtn" id="themeBtn" type="button" aria-pressed="false" aria-label="Dark mode">
-      <svg class="i-moon" viewBox="0 0 24 24" aria-hidden="true"><path d="M20 14.5A8 8 0 0 1 9.5 4a8 8 0 1 0 10.5 10.5z"/></svg>
-      <svg class="i-sun" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="4.2"/><path d="M12 2.5v2.2M12 19.3v2.2M2.5 12h2.2M19.3 12h2.2M5.3 5.3l1.6 1.6M17.1 17.1l1.6 1.6M5.3 18.7l1.6-1.6M17.1 6.9l1.6-1.6"/></svg>
-    </button>
-  </div>
-</header>
+<div class="gate" id="gate" hidden>
+  <form class="gate-card" id="signin">
+    <span class="dot" aria-hidden="true"></span>
+    <h1 id="gateName">Sign in</h1>
+    <p>Enter the access code you were given.</p>
+    <label for="code" class="sr">Access code</label>
+    <input id="code" name="code" autocomplete="one-time-code" autocapitalize="off" spellcheck="false" placeholder="xxxx-xxxx-xxxx" required>
+    <button class="btn primary" type="submit">Sign in</button>
+    <p class="gate-msg" id="gateMsg" role="alert"></p>
+  </form>
+</div>
 
-<main>
-  <section class="orb-sec" aria-label="Status">
-    <div class="orb" id="orb">
-      <div class="orb-glow" aria-hidden="true"></div>
-      <canvas id="orbCanvas" aria-hidden="true"></canvas>
-      <div class="core">
-        <div class="core-ctx" id="coreCtx"></div>
-        <div class="core-big" id="coreBig">…</div>
-        <div class="core-rule" aria-hidden="true"></div>
-        <div class="core-val" id="coreVal">–</div>
-        <div class="core-cap" id="coreCap"></div>
+<div class="shell" id="shell">
+  <aside class="side" id="side" aria-label="Sections">
+    <div class="brand"><span class="dot" aria-hidden="true"></span><div><h1 id="appName">Dashboard</h1><p id="tagline" class="tag"></p></div></div>
+    <nav id="nav" aria-label="Dashboard sections"></nav>
+    <div class="side-foot">
+      <div class="who"><b id="whoName"></b><span id="whoRole"></span></div>
+      <div class="side-btns">
+        <button class="iconbtn" id="themeBtn" type="button" aria-pressed="false" aria-label="Dark mode">
+          <svg class="i-moon" viewBox="0 0 24 24" aria-hidden="true"><path d="M20 14.5A8 8 0 0 1 9.5 4a8 8 0 1 0 10.5 10.5z"/></svg>
+          <svg class="i-sun" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="4.2"/><path d="M12 2.5v2.2M12 19.3v2.2M2.5 12h2.2M19.3 12h2.2M5.3 5.3l1.6 1.6M17.1 17.1l1.6 1.6M5.3 18.7l1.6-1.6M17.1 6.9l1.6-1.6"/></svg>
+        </button>
+        <button class="linkbtn" id="signOut" type="button">Sign out</button>
       </div>
-      <div id="orbRing" aria-hidden="true"></div>
     </div>
-    <p class="sr" id="orbSummary" aria-live="polite"></p>
-    <div class="actions" id="actions" aria-label="Run"></div>
-    <div class="runout" id="runOut" role="status" hidden></div>
-  </section>
+  </aside>
+  <div class="scrim" id="scrim" hidden></div>
 
-  <section aria-labelledby="h-metrics"><h2 id="h-metrics">Performance</h2><div class="tiles" id="tiles"></div></section>
-  <section class="panels" id="panels" aria-label="Data"></section>
+  <div class="main">
+    <header class="top">
+      <button class="iconbtn menu" id="menuBtn" type="button" aria-label="Open menu" aria-expanded="false" aria-controls="side">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h16M4 12h16M4 17h16"/></svg>
+      </button>
+      <div class="ttl"><h2 id="pageTitle">Overview</h2><p id="pageSub"></p></div>
+      <span class="live" id="live">Live</span>
+    </header>
+    <div class="notice" id="notice" role="status" hidden></div>
 
-  <section class="two">
-    <div class="card"><h2>Recent runs <span class="chip" id="health"></span></h2><div id="runs"></div></div>
-    <div class="card"><h2>Reports</h2><div id="reports"></div></div>
-  </section>
+    <main id="view">
+      <section class="view" id="v-overview" aria-label="Overview">
+        <div class="orb-sec">
+          <div class="orb" id="orb">
+            <div class="orb-glow" aria-hidden="true"></div>
+            <canvas id="orbCanvas" aria-hidden="true"></canvas>
+            <div class="core">
+              <div class="core-ctx" id="coreCtx"></div>
+              <div class="core-big" id="coreBig">…</div>
+              <div class="core-rule" aria-hidden="true"></div>
+              <div class="core-val" id="coreVal">–</div>
+              <div class="core-cap" id="coreCap"></div>
+            </div>
+            <div id="orbRing" aria-hidden="true"></div>
+          </div>
+          <p class="sr" id="orbSummary" aria-live="polite"></p>
+          <div class="actions" id="actions" aria-label="Run"></div>
+          <div class="runout" id="runOut" role="status" hidden></div>
+        </div>
+        <div class="tiles" id="tiles"></div>
+        <div class="services" id="services"></div>
+        <div class="panels" id="panels"></div>
+        <div class="two">
+          <div class="card"><h3>Recent runs <span class="chip" id="health"></span></h3><div id="runs"></div></div>
+          <div class="card"><h3>Reports</h3><div id="reportsMini"></div></div>
+        </div>
+      </section>
 
-  <section class="card" aria-labelledby="h-fb">
-    <h2 id="h-fb">Is it working? <span class="chip" id="fbCount"></span></h2>
-    <form id="fb" class="fb">
-      <div class="votes" role="group" aria-label="Your verdict">
-        <button type="button" class="vote" data-vote="up" aria-pressed="false">👍 Working</button>
-        <button type="button" class="vote" data-vote="down" aria-pressed="false">👎 Not right</button>
-      </div>
-      <label for="fbNote" class="sr">What should change?</label>
-      <textarea id="fbNote" maxlength="1000" placeholder="What should change? (optional)"></textarea>
-      <button class="btn primary" type="submit">Send feedback</button>
-    </form>
-    <ul class="fbrecent" id="fbRecent"></ul>
-  </section>
-  <p class="foot" id="foot"></p>
-</main>
+      <section class="view" id="v-pane" hidden>
+        <div class="actions start" id="paneActions"></div>
+        <div class="runout" id="paneOut" role="status" hidden></div>
+        <div class="tiles" id="paneTiles"></div>
+        <div class="panels" id="panePanels"></div>
+        <p class="empty" id="paneEmpty" hidden>Nothing here yet. The build fills this pane with its data.</p>
+      </section>
+
+      <section class="view" id="v-reports" hidden><div class="card"><div id="reports"></div></div></section>
+
+      <section class="view" id="v-feedback" hidden>
+        <div class="card">
+          <h3>Is it working? <span class="chip" id="fbCount"></span></h3>
+          <form id="fb" class="fb">
+            <div class="votes" role="group" aria-label="Your verdict">
+              <button type="button" class="vote" data-vote="up" aria-pressed="false">👍 Working</button>
+              <button type="button" class="vote" data-vote="down" aria-pressed="false">👎 Not right</button>
+            </div>
+            <label for="fbNote" class="sr">What should change?</label>
+            <textarea id="fbNote" maxlength="1000" placeholder="What should change? (optional)"></textarea>
+            <button class="btn primary" type="submit">Send feedback</button>
+          </form>
+          <ul class="fbrecent" id="fbRecent"></ul>
+        </div>
+      </section>
+
+      <section class="view" id="v-settings" hidden><form class="card form" id="settingsForm"></form></section>
+      <section class="view" id="v-users" hidden>
+        <form class="card form" id="addUser"></form>
+        <div class="card"><h3>People with access</h3><div id="userList"></div></div>
+        <div class="card"><h3>What clients can see</h3><p class="hint">Hide a pane from every client while you work on it. Admins always see everything.</p><div id="paneVis"></div></div>
+      </section>
+      <section class="view" id="v-activity" hidden>
+        <div class="card"><h3>Changes</h3><div id="auditList"></div></div>
+        <div class="card"><h3>Runs</h3><div id="runsAll"></div></div>
+        <div class="card"><h3>Feedback</h3><div id="fbAll"></div></div>
+      </section>
+      <section class="view" id="v-control" hidden>
+        <form class="card form" id="maintForm"></form>
+        <div class="card"><h3>Run anything</h3><p class="hint">Every action the solution has, including admin-only ones.</p><div class="actions start" id="allActions"></div><div class="runout" id="ctlOut" role="status" hidden></div></div>
+      </section>
+      <p class="foot" id="foot"></p>
+    </main>
+  </div>
+</div>
 <script src="orb.js"></script>
 <script src="app.js"></script>
 </body>
