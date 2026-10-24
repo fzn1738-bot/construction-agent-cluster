@@ -5,10 +5,10 @@
    No libraries. Draws on a <canvas>; respects prefers-reduced-motion and pauses when off screen. */
 (() => {
   const PALETTES = {
-    light: { ok: [10, 125, 140], run: [20, 100, 170], wait: [214, 140, 10], bad: [200, 55, 50] },    // design/DESIGN.md: teal idle, deep blue busy
-    dark: { ok: [76, 194, 209], run: [150, 225, 240], wait: [242, 184, 75], bad: [255, 138, 128] }   // teal idle, pale cyan busy
+    light: { ok: [28, 150, 230], run: [10, 116, 200], wait: [201, 131, 0], bad: [212, 64, 90] },     // sky idle, deep sky busy
+    dark: { ok: [92, 200, 255], run: [205, 238, 255], wait: [244, 196, 106], bad: [255, 138, 154] }   // sky idle, ice-white busy
   };
-  const RING_COLOURS = { light: { conn: '#17703a', engine: '#0a6b78', repos: '#5b4a9e', bad: '#b32a2a' }, dark: { conn: '#5fd48a', engine: '#4cc2d1', repos: '#b79af0', bad: '#ff8a80' } };
+  const RING_COLOURS = { light: { conn: '#0b7f56', engine: '#0a78c2', repos: '#5145c4', bad: '#bb2f46' }, dark: { conn: '#5ee0b4', engine: '#5cc8ff', repos: '#a9b6ff', bad: '#ff8a9a' } };
   // A solution's theme.css can recolour the orb: --orb-ok / --orb-run / --orb-wait / --orb-bad ("r g b") and
   // --ring-1 / --ring-2 / --ring-3 for the three ring captions. Missing values keep the palettes above.
   const cssVar = (n) => getComputedStyle(document.documentElement).getPropertyValue(n).trim();
@@ -225,7 +225,7 @@
     },
     /** captions for the three ring labels, left to right */
     caps(list) {
-      ['conn', 'engine', 'repos'].forEach((k, i) => { const n = ringNodes[k]; if (n && list && list[i]) n.cap.textContent = String(list[i]).slice(0, 18); });
+      ['conn', 'engine', 'repos'].forEach((k, i) => { const n = ringNodes[k]; if (n && list && list[i]) n.cap.textContent = String(list[i]).toUpperCase().slice(0, 18); });
     },
     ring(values, tones = {}) {
       for (const [k, v] of Object.entries(values)) { const n = ringNodes[k]; if (n && n.value.textContent !== v) n.value.textContent = v; }
