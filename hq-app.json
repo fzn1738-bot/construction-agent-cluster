@@ -1,5 +1,5 @@
 {
-  "name": "Construction Agent Dashboard",
+  "name": "Rebuild the dashboard as an admin portal",
   "port": 4102,
   "start": "node dashboard/server.mjs",
   "health": "/healthz"

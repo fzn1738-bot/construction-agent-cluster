@@ -10,6 +10,8 @@ const watch = path.join(dir, 'watch'); fs.mkdirSync(watch);
 fs.writeFileSync(path.join(dir, 'cfg.json'), JSON.stringify({ tickMs: 20, folders: [{ name: 'drawings', path: watch, intervalMs: 50, settleMs: 0 }] }));
 process.env.AGENT_DB = path.join(dir, 'a.db'); process.env.AGENT_CONFIG = path.join(dir, 'cfg.json'); delete process.env.AGENT_AUTOSTART;
 const { start } = await import('../dashboard/server.mjs');
+const { adminKey } = await import('../dashboard/store.mjs');
+const H = { 'x-app-key': adminKey() };
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
 test('the loop starts with the server, before any page or API request', async () => {
@@ -25,13 +27,13 @@ test('the loop starts with the server, before any page or API request', async ()
 
     // Run Now while the loop is also running: both requests share one run per task, nothing overlaps.
     const before = reader.countLogs('folder', 'ok');
-    const post = () => fetch(base + '/api/run', { method: 'POST', body: JSON.stringify({ action: 'run' }) }).then((r) => r.json());
+    const post = () => fetch(base + '/api/run', { method: 'POST', headers: H, body: JSON.stringify({ action: 'run' }) }).then((r) => r.json());
     const [a, b] = await Promise.all([post(), post()]);
     assert.equal(a.ok, true); assert.equal(b.ok, true);
     assert.match(a.message, /1 task\(s\) run, 0 failed/);
     assert.ok(reader.countLogs('folder', 'ok') >= before);
 
-    const s = await (await fetch(base + '/api/summary')).json();
+    const s = await (await fetch(base + '/api/summary', { headers: H })).json();
     assert.equal(s.status.headline === 'Healthy' || s.status.headline === 'Working', true, 'loop running: ' + s.status.headline);
     const spec = JSON.parse(fs.readFileSync(new URL('../dashboard/dashboard.json', import.meta.url), 'utf8'));
     assert.deepEqual(s.panels.map((p) => p.title), spec.panels.map((p) => p.title), 'panels follow dashboard.json');
