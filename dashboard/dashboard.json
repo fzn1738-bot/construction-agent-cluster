@@ -1,333 +1,734 @@
 {
-  "title": "Construction Agent Dashboard",
-  "tagline": "Is the agent alive and keeping up?",
+  "title": "Re-plan this solution from what it reall",
+  "tagline": "",
   "orb": {
     "headline": "Healthy",
-    "metric": "Active Tasks",
-    "value": "0",
-    "detail": "System is running smoothly"
+    "metric": "Success rate",
+    "value": "98%",
+    "detail": ""
   },
   "ring": [
     {
-      "label": "Polling Folders",
-      "sample": "2"
+      "label": "Runs today",
+      "sample": "24"
     },
     {
-      "label": "FTP Transfers",
-      "sample": "0"
+      "label": "Success",
+      "sample": "98%"
     },
     {
-      "label": "Emails Processed",
-      "sample": "0"
+      "label": "Last run",
+      "sample": "2m"
     }
   ],
   "metrics": [
     {
-      "key": "activeTasks",
-      "label": "Active Tasks",
-      "unit": "count",
-      "good": "down"
+      "key": "runs",
+      "label": "Runs",
+      "unit": "",
+      "good": "up"
     },
     {
-      "key": "syncRate",
-      "label": "Sync Rate",
+      "key": "success",
+      "label": "Success rate",
       "unit": "%",
       "good": "up"
     },
     {
-      "key": "avgRunMs",
-      "label": "Avg Run Time",
-      "unit": "ms",
+      "key": "latency",
+      "label": "Avg run time",
+      "unit": "s",
       "good": "down"
     },
     {
-      "key": "folderQueue",
-      "label": "Files Waiting",
-      "unit": "count",
+      "key": "errors",
+      "label": "Errors",
+      "unit": "",
       "good": "down"
     },
     {
-      "key": "folderEvents",
-      "label": "Folder Events",
-      "unit": "count",
-      "good": "up"
+      "key": "outcomes",
+      "label": "Outcomes delivered",
+      "unit": "",
+      "good": "up",
+      "sample": "4"
     },
     {
-      "key": "ftpTransfers",
-      "label": "FTP Transfers",
-      "unit": "count",
-      "good": "up"
-    },
-    {
-      "key": "ftpFailed",
-      "label": "FTP Failures",
-      "unit": "count",
-      "good": "down"
-    },
-    {
-      "key": "emailsProcessed",
-      "label": "Emails Processed",
-      "unit": "count",
-      "good": "up"
-    },
-    {
-      "key": "emailBacklog",
-      "label": "Email Backlog",
-      "unit": "count",
-      "good": "down"
-    },
-    {
-      "key": "stateRows",
-      "label": "Log Rows",
-      "unit": "count",
-      "good": "up"
-    },
-    {
-      "key": "stateHealth",
-      "label": "Database Integrity",
+      "key": "live",
+      "label": "Running on live data",
       "unit": "%",
-      "good": "up"
+      "good": "up",
+      "sample": "75"
     },
     {
-      "key": "staleMonitors",
-      "label": "Stale Monitors",
-      "unit": "count",
-      "good": "down"
+      "key": "screens",
+      "label": "Screens ready",
+      "unit": "",
+      "good": "up",
+      "sample": "5 of 5"
+    },
+    {
+      "key": "empty",
+      "label": "Screens without data",
+      "unit": "",
+      "good": "down",
+      "sample": "0"
+    },
+    {
+      "key": "failed",
+      "label": "Failed",
+      "unit": "",
+      "good": "down",
+      "sample": "1"
+    },
+    {
+      "key": "avg",
+      "label": "Avg duration",
+      "unit": "s",
+      "good": "down",
+      "sample": "11.2"
+    },
+    {
+      "key": "up",
+      "label": "Connected",
+      "unit": "",
+      "good": "up",
+      "sample": "3 of 4"
+    },
+    {
+      "key": "set",
+      "label": "Keys set",
+      "unit": "",
+      "good": "up",
+      "sample": "3 of 4"
+    },
+    {
+      "key": "demo",
+      "label": "Screens on demo data",
+      "unit": "",
+      "good": "down",
+      "sample": "1"
+    },
+    {
+      "key": "last",
+      "label": "Last run",
+      "unit": "min",
+      "good": "down",
+      "sample": "2"
     }
   ],
   "panels": [
     {
-      "title": "Recent Runs",
-      "kind": "table",
+      "title": "Activity",
+      "kind": "line",
       "fields": [
-        "Task",
-        "Status",
-        "Time"
+        "Runs"
       ]
     },
     {
-      "title": "System Logs",
+      "title": "Latest results",
+      "kind": "table",
+      "fields": [
+        "Item",
+        "Status",
+        "Updated"
+      ]
+    },
+    {
+      "title": "Coverage by outcome",
+      "kind": "bar",
+      "fields": [
+        "Items handled today"
+      ],
+      "labels": [
+        "Documents",
+        "Transfers",
+        "Inbox",
+        "Activity"
+      ]
+    },
+    {
+      "title": "Needs a key",
       "kind": "list",
       "fields": [
-        "Timestamp",
-        "Level",
-        "Message"
+        "Outcome",
+        "Missing"
+      ],
+      "sample": [
+        [
+          "Inbox triage",
+          "IMAP password"
+        ]
       ]
     },
     {
-      "title": "Monitors",
+      "title": "Screen readiness",
       "kind": "table",
       "fields": [
-        "Monitor",
-        "State",
-        "Last run",
-        "Queue"
+        "Screen",
+        "Layout",
+        "Main view",
+        "Actions",
+        "Data"
+      ],
+      "sample": [
+        [
+          "Documents",
+          "Split",
+          "Arrivals table",
+          "Scan now",
+          "Live"
+        ],
+        [
+          "Inbox",
+          "Split",
+          "Message queue",
+          "Check mail",
+          "Demo"
+        ]
       ]
     },
     {
-      "title": "Folder Activity",
-      "kind": "table",
+      "title": "Run durations, today",
+      "kind": "line",
       "fields": [
-        "Folder",
-        "Event",
-        "File",
-        "Time"
+        "Seconds"
+      ],
+      "labels": [
+        "06:00",
+        "08:00",
+        "10:00",
+        "12:00",
+        "14:00"
       ]
     },
     {
-      "title": "FTP Activity",
+      "title": "Action history",
       "kind": "table",
       "fields": [
-        "Site",
-        "Operation",
-        "File",
-        "Status",
-        "Time"
+        "Action",
+        "Started by",
+        "Started",
+        "Duration",
+        "Result"
+      ],
+      "sample": [
+        [
+          "Scan site folders",
+          "Fayez N.",
+          "09:42",
+          "3.1 s",
+          "42 files filed"
+        ]
       ]
     },
     {
-      "title": "Email Activity",
-      "kind": "table",
+      "title": "Latency, last hour",
+      "kind": "line",
       "fields": [
-        "Mailbox",
-        "Subject",
-        "Result",
-        "Time"
+        "FTP",
+        "IMAP"
+      ],
+      "labels": [
+        "-60m",
+        "-45m",
+        "-30m",
+        "-15m",
+        "now"
       ]
     },
     {
-      "title": "State Tables",
+      "title": "Connection cards",
+      "kind": "list",
+      "fields": [
+        "Service",
+        "State"
+      ],
+      "sample": [
+        [
+          "FTP server",
+          "Connected"
+        ],
+        [
+          "Mailbox (IMAP)",
+          "Key missing"
+        ]
+      ]
+    },
+    {
+      "title": "Add or replace a key",
+      "kind": "list",
+      "fields": [
+        "Key",
+        "Value",
+        "Save and test"
+      ],
+      "sample": [
+        [
+          "IMAP password",
+          "paste here",
+          "Save and test"
+        ]
+      ]
+    },
+    {
+      "title": "Live vs demo rows by screen",
+      "kind": "bar",
+      "fields": [
+        "Live",
+        "Demo"
+      ],
+      "labels": [
+        "Documents",
+        "Transfers",
+        "Inbox",
+        "Activity log"
+      ]
+    },
+    {
+      "title": "Data source by screen",
       "kind": "table",
       "fields": [
-        "Table",
-        "Rows"
+        "Screen",
+        "Source",
+        "Rows shown",
+        "Switches to live when"
+      ],
+      "sample": [
+        [
+          "Inbox",
+          "Demo sample",
+          "24",
+          "IMAP password saved"
+        ]
+      ]
+    },
+    {
+      "title": "Runs, last 24 hours",
+      "kind": "line",
+      "fields": [
+        "Runs"
+      ],
+      "labels": [
+        "00",
+        "06",
+        "12",
+        "18",
+        "now"
       ]
     }
   ],
   "actions": [
     {
       "id": "run",
-      "label": "Run Now",
-      "description": "Manually trigger all scheduled tasks",
-      "input": null
-    },
-    {
-      "id": "run-folders",
-      "label": "Poll folders now",
-      "description": "Poll every watched folder once",
-      "input": null
-    },
-    {
-      "id": "run-ftp",
-      "label": "Sync FTP now",
-      "description": "Run every FTP sync once",
-      "input": null
-    },
-    {
-      "id": "run-imap",
-      "label": "Check email now",
-      "description": "Poll every mailbox once",
-      "input": null
-    },
-    {
-      "id": "run-monitor",
-      "label": "Run one monitor",
-      "description": "Run a single monitor by id, e.g. folder:drawings",
-      "input": {
-        "label": "Monitor id",
-        "placeholder": "folder:drawings"
-      },
-      "adminOnly": true
-    },
-    {
-      "id": "check-state",
-      "label": "Check database",
-      "description": "Run the SQLite integrity check",
+      "label": "Run now",
+      "description": "Run the solution once",
       "input": null
     }
   ],
-  "reports": [
-    "Task History",
-    "Sync Performance"
-  ],
+  "reports": [],
   "panes": [
     {
-      "id": "loop",
-      "title": "Continuous Loop",
-      "summary": "The scheduler: runs, success rate and run times",
+      "id": "re-plan-this-solution-from-wha",
+      "title": "Re-plan this solution from what it reall",
+      "summary": "See every client outcome the agent delivers and which tab owns it.",
       "feature": "F1",
       "metrics": [
-        "activeTasks",
-        "syncRate",
-        "avgRunMs",
-        "staleMonitors"
+        "outcomes",
+        "live"
       ],
       "panels": [
-        "Recent Runs",
-        "Monitors",
-        "System Logs"
+        "Coverage by outcome",
+        "Needs a key"
       ],
       "actions": [
-        "run",
-        "run-monitor"
+        "run"
       ],
-      "client": true
+      "client": true,
+      "layout": "split",
+      "columns": [
+        "Outcome",
+        "Fed by",
+        "Tab",
+        "Status",
+        "Last delivered"
+      ],
+      "sample": [
+        [
+          "Site drawings filed on arrival",
+          "Folder watcher",
+          "Documents",
+          "Live",
+          "2 min ago"
+        ],
+        [
+          "Contractor files mirrored offsite",
+          "FTP sync",
+          "Transfers",
+          "Live",
+          "11 min ago"
+        ],
+        [
+          "RFIs and invoices triaged from inbox",
+          "IMAP polling",
+          "Inbox",
+          "Demo data",
+          "Waiting for key"
+        ],
+        [
+          "Every action traceable",
+          "SQLite state",
+          "Activity log",
+          "Live",
+          "Just now"
+        ]
+      ],
+      "recordsTitle": "Client outcomes"
     },
     {
-      "id": "folders",
-      "title": "Local Folder Polling",
-      "summary": "Watched folders, files waiting and what was handled",
-      "feature": "F2",
-      "metrics": [
-        "folderQueue",
-        "folderEvents"
-      ],
-      "panels": [
-        "Folder Activity"
-      ],
-      "actions": [
-        "run-folders"
-      ],
-      "client": true
-    },
-    {
-      "id": "ftp",
-      "title": "FTP Client Sync",
-      "summary": "Uploads and downloads against remote sites",
+      "id": "give-each-tab-a-real-screen",
+      "title": "give each tab a real screen",
+      "summary": "Open any client tab and check its screen has data, a main view and buttons.",
       "feature": "F3",
       "metrics": [
-        "ftpTransfers",
-        "ftpFailed"
+        "screens",
+        "empty"
       ],
       "panels": [
-        "FTP Activity"
+        "Screen readiness"
       ],
-      "actions": [
-        "run-ftp"
+      "actions": [],
+      "client": true,
+      "layout": "grid",
+      "columns": [
+        "Screen",
+        "Layout",
+        "Main view",
+        "Actions",
+        "Data"
       ],
-      "client": true
+      "sample": [
+        [
+          "Documents",
+          "Split",
+          "Arrivals table + folder summary",
+          "Scan now",
+          "Live"
+        ],
+        [
+          "Transfers",
+          "Focus",
+          "Throughput line",
+          "Sync now",
+          "Live"
+        ],
+        [
+          "Inbox",
+          "Split",
+          "Message queue + sender summary",
+          "Check mail",
+          "Demo"
+        ],
+        [
+          "Activity log",
+          "Grid",
+          "Run history",
+          "Export",
+          "Live"
+        ],
+        [
+          "Settings",
+          "Focus",
+          "Key vault",
+          "Test connection",
+          "Live"
+        ]
+      ],
+      "recordsTitle": "Screens"
     },
     {
-      "id": "email",
-      "title": "IMAP Email Polling",
-      "summary": "Mailboxes, processed emails and backlog",
+      "id": "working-actions",
+      "title": "working actions",
+      "summary": "Press a run button and watch the result land in the history.",
       "feature": "F4",
       "metrics": [
-        "emailsProcessed",
-        "emailBacklog"
+        "runs",
+        "failed",
+        "avg"
       ],
       "panels": [
-        "Email Activity"
+        "Run durations, today",
+        "Action history"
       ],
       "actions": [
-        "run-imap"
+        "run"
       ],
-      "client": true
+      "client": true,
+      "layout": "focus",
+      "columns": [
+        "Action",
+        "Started by",
+        "Started",
+        "Duration",
+        "Result"
+      ],
+      "sample": [
+        [
+          "Scan site folders",
+          "Fayez N.",
+          "09:42",
+          "3.1 s",
+          "42 files filed"
+        ],
+        [
+          "Sync to FTP",
+          "Schedule",
+          "09:30",
+          "18.4 s",
+          "7 uploaded, 0 failed"
+        ],
+        [
+          "Check inbox",
+          "Schedule",
+          "09:15",
+          "2.2 s",
+          "3 RFIs, 1 invoice"
+        ],
+        [
+          "Sync to FTP",
+          "Fayez N.",
+          "08:58",
+          "31.0 s",
+          "1 failed: timeout"
+        ]
+      ],
+      "recordsTitle": "Action history"
     },
     {
-      "id": "state",
-      "title": "SQLite State",
-      "summary": "Persisted state, row counts and integrity",
-      "feature": "F4",
+      "id": "connections-for-every-outside-",
+      "title": "connections for every outside API",
+      "summary": "connections for every outside API",
+      "feature": "F5",
+      "metrics": [],
+      "panels": [],
+      "actions": [],
+      "client": true,
+      "layout": "grid"
+    },
+    {
+      "id": "keys-entered-in-settings",
+      "title": "keys entered in Settings",
+      "summary": "Paste a key, save it, and see the connection switch from demo to live.",
+      "feature": "F6",
       "metrics": [
-        "stateRows",
-        "stateHealth"
+        "set"
       ],
       "panels": [
-        "State Tables"
+        "Add or replace a key"
+      ],
+      "actions": [],
+      "client": true,
+      "layout": "split",
+      "columns": [
+        "Key",
+        "Used by",
+        "Value",
+        "Updated",
+        "Status"
+      ],
+      "sample": [
+        [
+          "FTP password",
+          "FTP server",
+          "••••••••9f2a",
+          "12 Oct",
+          "Valid"
+        ],
+        [
+          "IMAP password",
+          "Mailbox",
+          "Not set",
+          "—",
+          "Missing"
+        ],
+        [
+          "IMAP user",
+          "Mailbox",
+          "site@harlowbuild.example",
+          "—",
+          "Set"
+        ],
+        [
+          "Watch folder path",
+          "Site folders",
+          "/Volumes/Projects/Incoming",
+          "3 Sep",
+          "Valid"
+        ]
+      ],
+      "recordsTitle": "Stored keys"
+    },
+    {
+      "id": "demo-data-until-keys-are-set",
+      "title": "demo data until keys are set",
+      "summary": "Know which numbers are real and which are demo samples.",
+      "feature": "F7",
+      "metrics": [
+        "demo",
+        "live"
+      ],
+      "panels": [
+        "Live vs demo rows by screen",
+        "Data source by screen"
+      ],
+      "actions": [],
+      "client": true,
+      "layout": "focus",
+      "columns": [
+        "Screen",
+        "Source",
+        "Rows shown",
+        "Switches to live when"
+      ],
+      "sample": [
+        [
+          "Documents",
+          "Live",
+          "1,284",
+          "—"
+        ],
+        [
+          "Transfers",
+          "Live",
+          "312",
+          "—"
+        ],
+        [
+          "Inbox",
+          "Demo sample",
+          "24",
+          "IMAP password saved"
+        ],
+        [
+          "Activity log",
+          "Live",
+          "5,090",
+          "—"
+        ]
+      ],
+      "recordsTitle": "Data source by screen"
+    },
+    {
+      "id": "a-futuristic-overview-visual-s",
+      "title": "a futuristic overview visual showing the",
+      "summary": "Read the whole agent's health from one glance at the site map.",
+      "feature": "F8",
+      "metrics": [
+        "success",
+        "last"
+      ],
+      "panels": [
+        "Runs, last 24 hours"
       ],
       "actions": [
-        "check-state"
+        "run"
       ],
-      "client": true
-    }
-  ],
-  "settings": [
-    {
-      "key": "staleAfterMin",
-      "label": "Stale after (minutes)",
-      "type": "number",
-      "default": 30,
-      "help": "A monitor with no run for this long counts as stale.",
-      "group": "Monitoring"
+      "client": true,
+      "layout": "focus",
+      "columns": [
+        "Outcome",
+        "State",
+        "Primary number",
+        "Updated"
+      ],
+      "sample": [
+        [
+          "Documents",
+          "Healthy",
+          "42 filed today",
+          "2 min ago"
+        ],
+        [
+          "Transfers",
+          "Caution",
+          "1 failed upload",
+          "11 min ago"
+        ],
+        [
+          "Inbox",
+          "Demo",
+          "24 sample messages",
+          "—"
+        ],
+        [
+          "Activity log",
+          "Healthy",
+          "24 runs",
+          "Just now"
+        ]
+      ],
+      "recordsTitle": "Outcome status"
     },
     {
-      "key": "recentRows",
-      "label": "Rows per activity panel",
-      "type": "number",
-      "default": 12,
-      "help": "How many recent entries each panel lists.",
-      "group": "Monitoring"
-    },
-    {
-      "key": "successTarget",
-      "label": "Sync rate target (%)",
-      "type": "number",
-      "default": 90,
-      "help": "The orb turns amber below this success rate.",
-      "group": "Monitoring"
+      "id": "connections-for-every-outside",
+      "title": "Pane 4",
+      "summary": "Check each outside service is reachable and test it.",
+      "feature": "",
+      "metrics": [
+        "up",
+        "latency"
+      ],
+      "panels": [
+        "Latency, last hour",
+        "Connection cards"
+      ],
+      "actions": [
+        "run"
+      ],
+      "client": true,
+      "layout": "grid",
+      "columns": [
+        "Service",
+        "Endpoint",
+        "State",
+        "Latency",
+        "Last checked"
+      ],
+      "sample": [
+        [
+          "Site folders",
+          "/Volumes/Projects/Incoming",
+          "Connected",
+          "4 ms",
+          "1 min ago"
+        ],
+        [
+          "FTP server",
+          "ftp.harlowbuild.example:21",
+          "Connected",
+          "212 ms",
+          "3 min ago"
+        ],
+        [
+          "Mailbox (IMAP)",
+          "imap.harlowbuild.example:993",
+          "Key missing",
+          "—",
+          "Never"
+        ],
+        [
+          "Local database",
+          "state.sqlite",
+          "Connected",
+          "1 ms",
+          "Just now"
+        ]
+      ],
+      "recordsTitle": "Connections"
     }
   ],
+  "settings": [],
+  "connections": [],
   "repo": "construction-agent-cluster",
   "port": 4102
 }
