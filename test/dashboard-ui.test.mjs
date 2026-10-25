@@ -46,6 +46,12 @@ test('F3: every pane screen exports render() and update(), and none breaks the s
   assert.doesNotMatch(read('hero.js'), /innerHTML|\.style\.|eval\(|TODO/);
 });
 
+test('QA: the HTML shell has no inline event handlers under its strict CSP', () => {
+  const html = read('index.html');
+  assert.doesNotMatch(html, /\s(on[a-z]+)\s*=/i);
+  assert.match(read('app.js'), /#demoForm'\)\.addEventListener\('submit', \(e\) => e\.preventDefault\(\)\)/);
+});
+
 test('look and feel: only the design tokens, the system fonts and the type scale', () => {
   const css = read('theme.css');
   const tail = css.slice(css.indexOf('pane screens (panes'));

@@ -56,6 +56,7 @@
     KEY = $('#code').value.trim(); session.set('app-key', KEY);
     try { await api('api/me'); $('#gate').hidden = true; $('#shell').hidden = false; $('#code').value = ''; poll(true); } catch {}
   });
+  $('#demoForm').addEventListener('submit', (e) => e.preventDefault());
   $('#signOut').addEventListener('click', () => { KEY = ''; session.del('app-key'); last = null; showGate(); });
 
   // ---------- sidebar ----------
