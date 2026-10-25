@@ -1,5 +1,5 @@
 {
-  "name": "Rebuild the dashboard as an admin portal",
+  "name": "Re-plan this solution from what it reall",
   "port": 4102,
   "start": "node dashboard/server.mjs",
   "health": "/healthz"

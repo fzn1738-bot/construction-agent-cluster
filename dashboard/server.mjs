@@ -4,7 +4,10 @@
 //   Admin  (the owner's key): every pane, plus Settings, Users & access, Activity and Control.
 //   Client (a code the admin hands out): only the panes that client is given, with run buttons if allowed.
 // A left sidebar lists Overview, one pane per feature or service (dashboard.json "panes"), Reports and Feedback.
-// The app's own logic lives in ./hooks.mjs: status(), metrics(), panels(), actions, run(), reports().
+// The app's own logic lives in ./hooks.mjs: status(), metrics(), panels(), actions, run(), reports(), and for its
+// own pane screens pane(id) and paneAction(id, action, input); testConnection(id, settings) checks a connection.
+// ./demo.mjs has the same exports with realistic demo data, used while the demo switch is on.
+// Each pane can have its own screen (public/panes/<id>.js) and Overview its own centrepiece (public/hero.js).
 // Every API call carries the key in the x-app-key header (or ?key= for report links).
 import http from 'node:http';
 import fs from 'node:fs';
@@ -16,7 +19,13 @@ const HERE = path.dirname(fileURLToPath(import.meta.url));
 const PUBLIC = path.join(HERE, 'public');
 const SPEC = store.SPEC;
 const MOCK = process.env.HQ_MOCK === '1';
-const hooks = MOCK ? await import('./mock.mjs') : await import('./hooks.mjs');
+const mock = await import('./mock.mjs');
+const real = MOCK ? mock : await import('./hooks.mjs');
+const demo = MOCK ? mock : fs.existsSync(path.join(HERE, 'demo.mjs')) ? await import('./demo.mjs') : mock;
+// where data comes from right now: demo data while the demo switch is on, else the real hooks
+const src = () => (MOCK ? mock : store.demoOn() ? demo : real);
+const hasFile = (rel) => fs.existsSync(path.join(PUBLIC, rel));
+const paneView = (id) => (hasFile('panes/' + id + '.js') ? 'panes/' + id + '.js' : null);
 
 const TYPES = { '.html': 'text/html; charset=utf-8', '.js': 'text/javascript; charset=utf-8', '.css': 'text/css; charset=utf-8', '.json': 'application/json', '.svg': 'image/svg+xml', '.png': 'image/png', '.csv': 'text/csv; charset=utf-8', '.md': 'text/markdown; charset=utf-8', '.pdf': 'application/pdf', '.woff2': 'font/woff2', '.woff': 'font/woff' };
 const HEADERS = { 'X-Content-Type-Options': 'nosniff', 'Referrer-Policy': 'no-referrer', 'Cache-Control': 'no-store',
@@ -44,7 +53,7 @@ function paneOf(kind, item, all) {
   const p = all.find((x) => list(x[kind]).map(String).includes(String(id)));
   return p ? p.id : 'overview';
 }
-function actionList() { return list(hooks.actions).map((a) => ({ id: String(a.id), label: String(a.label || a.id), description: a.description || '', input: a.input || null, pane: a.pane || null, adminOnly: !!a.adminOnly })); }
+function actionList() { return list(src().actions).map((a) => ({ id: String(a.id), label: String(a.label || a.id), description: a.description || '', input: a.input || null, pane: a.pane || null, adminOnly: !!a.adminOnly })); }
 function visibleActions(user, allowedIds, allPanes) {
   return actionList().filter((a) => !(a.adminOnly && user.role !== 'admin')).map((a) => ({ ...a, pane: paneOf('actions', a, allPanes) }))
     .filter((a) => user.role === 'admin' || a.pane === 'overview' || allowedIds.has(a.pane));
@@ -60,15 +69,19 @@ async function summary(user) {
   const ok = runs.filter((r) => r.ok).length;
   const mine = user.role === 'admin' ? runs : runs.filter((r) => r.by === user.id || ids.has(r.pane) || r.pane === 'overview');
   const m = store.maintenance();
+  const h = src();
+  const states = await safely(() => (h.paneStatus ? h.paneStatus() : {}), {});
+  const cs = store.connectionSummary();
   return {
-    app: { name: SPEC.title || 'Dashboard', tagline: SPEC.tagline || '', ring: list(SPEC.ring).map((r) => r.label), mock: MOCK },
+    app: { name: SPEC.title || 'Dashboard', tagline: SPEC.tagline || '', ring: list(SPEC.ring).map((r) => r.label), mock: MOCK, demo: !MOCK && store.demoOn(), hero: hasFile('hero.js') ? 'hero.js' : null },
     me: { name: user.name, role: user.role, canRun: user.role === 'admin' || !!user.canRun },
-    panes: allowed.map((p) => ({ id: p.id, title: p.title, summary: p.summary, feature: p.feature, clientVisible: p.clientVisible })),
-    status: await safely(() => hooks.status(), {}),
-    metrics: keep('metrics')(await safely(() => hooks.metrics(), [])),
-    panels: keep('panels')(await safely(() => hooks.panels(), [])),
+    panes: allowed.map((p) => ({ id: p.id, title: p.title, summary: p.summary, feature: p.feature, layout: p.layout, clientVisible: p.clientVisible, view: paneView(p.id), state: states && states[p.id] ? states[p.id] : null })),
+    connections: user.role === 'admin' ? cs : { total: cs.total, ready: cs.ready },
+    status: await safely(() => h.status(), {}),
+    metrics: keep('metrics')(await safely(() => h.metrics(), [])),
+    panels: keep('panels')(await safely(() => h.panels(), [])),
     actions: visibleActions(user, ids, allPanes),
-    reports: list(await safely(() => (hooks.reports ? hooks.reports() : []), [])),
+    reports: list(await safely(() => (h.reports ? h.reports() : []), [])),
     runs: mine.slice(0, 20),
     health: { runs: runs.length, successRate: runs.length ? Math.round((ok / runs.length) * 100) : null, avgMs: runs.length ? Math.round(runs.reduce((a, r) => a + (r.ms || 0), 0) / runs.length) : null },
     feedback: user.role === 'admin' ? { up: fb.filter((f) => f.vote === 'up').length, down: fb.filter((f) => f.vote === 'down').length, recent: fb.slice(-8).reverse() } : { up: 0, down: 0, recent: fb.filter((f) => f.by === user.id).slice(-5).reverse() },
@@ -83,6 +96,8 @@ function adminState() {
     users: store.users().map(store.publicUser),
     previewClient: store.previewClientOn(),
     panes: store.panes().map((p) => ({ id: p.id, title: p.title, summary: p.summary, feature: p.feature, clientVisible: p.clientVisible })),
+    connections: store.connections(),
+    demo: { on: store.demoOn(), available: fs.existsSync(path.join(HERE, 'demo.mjs')) },
     actions: actionList(),
     maintenance: store.maintenance(),
     audit: store.readLines('audit.jsonl', 100).reverse(),
@@ -94,7 +109,7 @@ async function adminPost(p, b, user) {
   if (p === '/api/admin/settings') {
     const changed = store.saveSettings(b.values || {});
     if (changed.length) store.audit(user, 'Changed settings: ' + changed.join(', '));
-    if (hooks.onSettings) await safely(() => hooks.onSettings(store.getSettings()), null);
+    if (real.onSettings) await safely(() => real.onSettings(store.getSettings()), null);
     return { ok: true, changed };
   }
   if (p === '/api/admin/users') {
@@ -116,6 +131,22 @@ async function adminPost(p, b, user) {
     store.audit(user, 'Pane ' + b.id + (b.clientVisible ? ' shown to' : ' hidden from') + ' clients');
     return { ok: true };
   }
+  if (p === '/api/admin/connections') {
+    const c = store.connections().find((x) => x.id === String(b.id || ''));
+    if (!c) return { ok: false, message: 'No such connection' };
+    let r;
+    if (!c.ready) r = { ok: false, message: 'Missing: ' + c.missing.join(', ') };
+    else if (!real.testConnection) r = { ok: true, message: 'Saved. This solution has no live test for ' + c.name + ' yet.' };
+    else { try { r = (await real.testConnection(c.id, store.getSettings())) || { ok: true, message: 'Connected' }; } catch (e) { r = { ok: false, message: String(e && e.message || e) }; } }
+    const saved = store.saveConnectionTest(c.id, r);
+    store.audit(user, 'Tested ' + c.name + ': ' + (saved.ok ? 'connected' : 'failed') + (saved.message ? ' (' + saved.message.slice(0, 120) + ')' : ''));
+    return { ok: true, test: saved };
+  }
+  if (p === '/api/admin/demo') {
+    store.setDemo(!!b.on);
+    store.audit(user, 'Demo data turned ' + (b.on ? 'on' : 'off'));
+    return { ok: true, on: store.demoOn() };
+  }
   if (p === '/api/admin/maintenance') {
     store.setMaintenance(!!b.on, b.message);
     store.audit(user, b.on ? 'Paused client access' + (b.message ? ': ' + b.message : '') : 'Resumed client access');
@@ -128,7 +159,7 @@ const server = http.createServer(async (req, res) => {
   const url = new URL(req.url, 'http://x');
   const p = url.pathname;
   try {
-    if (p === '/healthz') return send(res, 200, { ok: true, app: SPEC.title || 'dashboard', id: process.env.HQ_APP_ID || null, mock: MOCK, portals: ['admin', 'client'], panes: store.panes().length });
+    if (p === '/healthz') { const cs = store.connectionSummary(); return send(res, 200, { ok: true, app: SPEC.title || 'dashboard', id: process.env.HQ_APP_ID || null, mock: MOCK, demo: !MOCK && store.demoOn(), portals: ['admin', 'client'], panes: store.panes().length, paneViews: store.panes().filter((x) => paneView(x.id)).length, hero: hasFile('hero.js'), connections: { total: cs.total, ready: cs.ready } }); }
     if (p.startsWith('/api/') || p.startsWith('/reports/')) {
       const user = userFor(req, url);
       if (!user) return send(res, 401, { ok: false, message: 'Sign in with your access code.' });
@@ -145,11 +176,32 @@ const server = http.createServer(async (req, res) => {
         if (user.role !== 'admin' && !user.canRun) return send(res, 403, { ok: false, message: 'Your access can view but not run.' });
         const t0 = Date.now();
         let out;
-        try { out = (await hooks.run(a.id, typeof b.input === 'string' ? b.input.slice(0, 4000) : '', { user: { id: user.id, name: user.name, role: user.role }, settings: store.getSettings() })) || { ok: true, message: 'Done' }; }
+        try { out = (await src().run(a.id, typeof b.input === 'string' ? b.input.slice(0, 4000) : '', { user: { id: user.id, name: user.name, role: user.role }, settings: store.getSettings() })) || { ok: true, message: 'Done' }; }
         catch (e) { out = { ok: false, message: String(e && e.message || e) }; }
         const rec = { at: new Date().toISOString(), action: a.id, label: a.label, pane: a.pane, by: user.id, byName: user.name, ok: out.ok !== false, ms: Date.now() - t0, message: String(out.message || '').slice(0, 500) };
         store.appendLine('runs.jsonl', rec);
         return send(res, 200, { ...rec, output: out.output ?? null });
+      }
+      // a pane's own screen: GET its data, POST an action it offers
+      const pm = p.match(/^\/api\/pane\/([a-z0-9-]{1,40})(\/do)?$/);
+      if (pm) {
+        const pane = store.allowedPanes(user).find((x) => x.id === pm[1]);
+        if (!pane) return send(res, 404, { ok: false, message: 'This pane is not part of your access.' });
+        const ctx = { user: { id: user.id, name: user.name, role: user.role }, settings: store.getSettings(), demo: !MOCK && store.demoOn() };
+        const h = src();
+        if (!pm[2] && req.method === 'GET') return send(res, 200, { ok: true, pane: pane.id, data: await safely(() => (h.pane ? h.pane(pane.id, ctx) : null), null) });
+        if (pm[2] && req.method === 'POST') {
+          if (user.role !== 'admin' && !user.canRun) return send(res, 403, { ok: false, message: 'Your access can view but not change things.' });
+          const b = await body(req);
+          const t0 = Date.now();
+          let out;
+          try { out = h.paneAction ? (await h.paneAction(pane.id, String(b.action || ''), b.input ?? null, ctx)) || { ok: true, message: 'Done' } : { ok: false, message: 'This pane has no actions.' }; }
+          catch (e) { out = { ok: false, message: String(e && e.message || e) }; }
+          const rec = { at: new Date().toISOString(), action: pane.id + ':' + String(b.action || '').slice(0, 40), label: pane.title + ': ' + String(b.action || '').slice(0, 40), pane: pane.id, by: user.id, byName: user.name, ok: out.ok !== false, ms: Date.now() - t0, message: String(out.message || '').slice(0, 500) };
+          store.appendLine('runs.jsonl', rec);
+          return send(res, 200, { ...rec, output: out.output ?? null, data: out.data ?? null });
+        }
+        return send(res, 405, { ok: false, message: 'Method not allowed' });
       }
       if (p === '/api/feedback' && req.method === 'POST') {
         const b = await body(req, 8192);
@@ -171,7 +223,8 @@ const server = http.createServer(async (req, res) => {
       return send(res, 404, { ok: false, message: 'Not found' });
     }
     const file = p === '/' ? 'index.html' : p.slice(1);
-    if (/^[\w.-]+$/.test(file) && fs.existsSync(path.join(PUBLIC, file))) return send(res, 200, fs.readFileSync(path.join(PUBLIC, file)), TYPES[path.extname(file)] || 'application/octet-stream');
+    // files in public/ and its folders (panes/, fonts/, img/), never outside it
+    if (/^[\w-][\w.-]*(\/[\w-][\w.-]*){0,3}$/.test(file) && !file.split('/').includes('..') && fs.existsSync(path.join(PUBLIC, file)) && fs.statSync(path.join(PUBLIC, file)).isFile()) return send(res, 200, fs.readFileSync(path.join(PUBLIC, file)), TYPES[path.extname(file)] || 'application/octet-stream');
     send(res, 404, 'Not found', 'text/plain');
   } catch (e) { send(res, 400, { ok: false, message: e.message }); }
 });

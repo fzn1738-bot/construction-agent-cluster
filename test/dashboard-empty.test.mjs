@@ -5,7 +5,7 @@ import os from 'node:os';
 import path from 'node:path';
 
 const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'dash-empty-'));
-process.env.AGENT_DB = path.join(dir, 'a.db'); process.env.AGENT_CONFIG = path.join(dir, 'missing.json');
+process.env.HQ_APP_DATA = path.join(dir, 'data'); process.env.AGENT_DB = path.join(dir, 'a.db'); process.env.AGENT_CONFIG = path.join(dir, 'missing.json');
 const hooks = await import('../dashboard/hooks.mjs');
 
 test('with no monitors configured the orb says Idle and Run Now fails instead of claiming success', async () => {
@@ -15,6 +15,10 @@ test('with no monitors configured the orb says Idle and Run Now fails instead of
   assert.equal(s.headline, 'Idle'); assert.equal(s.mood, 'wait');
   const r = await hooks.run('run');
   assert.equal(r.ok, false); assert.match(r.message, /No monitors configured/);
+  const st = await hooks.paneStatus();
+  assert.deepEqual(['documents', 'transfers', 'inbox'].map((k) => st[k].state), ['idle', 'idle', 'idle'], 'unconfigured tabs wait for their keys');
+  assert.match(st.documents.text, /Connections/);
+  assert.equal((await hooks.pane('documents')).configured, false);
   const mons = hooks.monitorTable();
   assert.deepEqual(mons.rows, []);
 });
