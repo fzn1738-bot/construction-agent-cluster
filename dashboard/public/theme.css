@@ -225,10 +225,20 @@
 .sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
 
 /* demo banner: one compact row (chip, what it means, Settings) */
-.cg-banner { display: flex; flex-wrap: wrap; align-items: center; gap: 12px 16px; padding: 12px 16px; border-radius: 16px; border: 1px dashed var(--accent); background: var(--accent-soft); color: var(--ink); }
-.cg-banner-text { display: grid; gap: 2px; flex: 1 1 280px; min-width: 0; font-size: 14px; }
-.cg-banner-text b { font-weight: 650; color: var(--strong); }
+.cg-banner { display: grid; grid-template-columns: auto auto minmax(0, 1fr) auto; grid-template-areas: "chip title text go"; align-items: center; gap: 8px 12px; padding: 8px 8px 8px 16px; border-radius: 16px; border: 1px dashed var(--accent); background: var(--accent-soft); color: var(--ink); }
+.cg-banner > .cg-chip { grid-area: chip; }
+.cg-banner-title { grid-area: title; font-weight: 650; font-size: 14px; color: var(--strong); white-space: nowrap; }
+.cg-banner-text { grid-area: text; margin: 0; min-width: 0; font-size: 14px; color: var(--ink-2); }
 .cg-banner-text small { font-size: 12px; color: var(--ink-2); }
+.cg-banner-go { grid-area: go; white-space: nowrap; text-decoration: none; display: inline-flex; align-items: center; }
+/* phones: chip, title and the Settings link on one line, the explanation underneath */
+@media (max-width: 719px) {
+  .cg-banner { grid-template-columns: auto minmax(0, 1fr) auto; grid-template-areas: "chip title go" "text text text"; padding: 8px 8px 12px 12px; }
+  .cg-banner-title { white-space: normal; }
+  .cg-banner-go { padding: 8px 14px; }
+  .cg-banner-text { line-height: 1.4; }
+}
+@media (max-width: 379px) { .cg-banner-title { display: none; } .cg-banner { grid-template-columns: auto 1fr auto; } }
 
 /* collapsible admin editors */
 .cg-more { border-top: 1px solid var(--rule); padding-top: 8px; }
@@ -258,6 +268,12 @@
 }
 .cg-flow { display: grid; grid-template-columns: minmax(0, 1fr); gap: 8px; align-items: center; padding: 12px; border-radius: 14px; background: var(--surface-2); border: 1px solid var(--rule); }
 @media (min-width: 560px) { .cg-flow { grid-template-columns: minmax(0, 1fr) minmax(0, 1.4fr) minmax(0, 1fr); } }
+/* phones: Site and Contractor side by side, the two lanes between them underneath; the Sync button before the diagram */
+@media (max-width: 559px) {
+  .cg-flow { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); grid-template-areas: "a b" "lanes lanes"; }
+  .cg-flow > .cg-end:first-child { grid-area: a; } .cg-flow > .cg-end:last-child { grid-area: b; text-align: right; } .cg-flow > .cg-lanes { grid-area: lanes; }
+}
+@media (max-width: 719px) { .cg-top > .cg-top-side { order: 1; } .cg-top > .cg-flow { order: 2; } }
 .cg-end { display: grid; gap: 2px; min-width: 0; padding: 8px 12px; border-radius: 10px; background: var(--surface); border: 1px solid var(--rule); }
 .cg-end small { font-size: 12px; color: var(--ink-3); text-transform: uppercase; letter-spacing: 0.06em; }
 .cg-end b { font-size: 14px; color: var(--strong); overflow-wrap: anywhere; }
@@ -406,8 +422,25 @@
 @media (min-width: 1100px) {
   #v-overview { grid-template-columns: repeat(12, minmax(0, 1fr)); column-gap: 16px; }
   #v-overview > * { grid-column: 1 / -1; }
+  /* the chart with Reports under it on the left; Recent runs runs the full height on the right, so no column ends early */
   #v-overview > .panels { grid-column: 1 / span 7; align-self: start; }
-  #v-overview > .two { grid-column: 8 / -1; grid-template-columns: minmax(0, 1fr); align-content: start; }
+  #v-overview > .two { display: contents; }
+  #v-overview > .two > :first-child { grid-column: 8 / -1; grid-row: span 2; align-self: start; }
+  #v-overview > .two > :last-child { grid-column: 1 / span 7; align-self: start; }
+}
+@media (min-width: 1100px) and (max-width: 1279px) {
+  #v-overview > .panels, #v-overview > .two > :last-child { grid-column: 1 / span 6; }
+  #v-overview > .two > :first-child { grid-column: 7 / -1; }
+}
+/* the kit chart scales its viewBox down in narrow cards: grow its axis words so they stay at 12px or more */
+#v-overview #panels .panel { container-type: inline-size; }
+@container (max-width: 419px) { .chart .axis { font-size: 14px; } }
+@container (max-width: 359px) { .chart .axis { font-size: 16px; } }
+@container (max-width: 299px) { .chart .axis { font-size: 20px; } }
+/* phone tap targets for the kit's setup button and report links */
+@media (max-width: 719px) {
+  #setup .setup-card .btn { min-height: 44px; display: inline-flex; align-items: center; }
+  #reportsMini a, #reports a { display: inline-flex; align-items: center; min-height: 44px; }
 }
 
 @media (prefers-reduced-motion: reduce) { .cg-node, .cg-pill, .cg-more summary { transition: none; } }

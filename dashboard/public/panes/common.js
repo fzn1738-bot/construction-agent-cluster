@@ -21,13 +21,14 @@ export function demoBanner(ctx, d) {
   const { h } = ctx;
   if (!d || d.source !== 'demo') return null;
   const own = d.configured === false;
+  // one compact row on wide screens; on phones the chip, title and Settings link share the first line
   return h('section', { class: 'cg-banner', role: 'note' },
     chip(h, 'Demo data', 'demo'),
-    h('div', { class: 'cg-banner-text' },
-      h('b', { text: own ? 'Showing demo records' : 'Sample numbers' }),
-      h('span', { text: own ? (d.needs || 'Enter the keys for this service') + ' to see your own records here. Buttons work on the demo records until then.' : 'Every number on this screen is a demo sample until the keys are saved.' }),
-      own && d.missing && d.missing.length ? h('small', { text: 'Still missing: ' + d.missing.join(', ') }) : null),
-    ctx.me.role === 'admin' ? h('a', { class: 'btn', href: '#/admin/settings', text: 'Open Settings' }) : null);
+    h('b', { class: 'cg-banner-title', text: own ? 'Showing demo records' : 'Sample numbers' }),
+    h('p', { class: 'cg-banner-text' },
+      own ? (d.needs || 'Enter the keys for this service') + ' to see your own records here. Buttons work on the demo records until then.' : 'Every number on this screen is a demo sample until the keys are saved.',
+      own && d.missing && d.missing.length ? h('small', { text: ' Still missing: ' + d.missing.join(', ') + '.' }) : null),
+    ctx.me.role === 'admin' ? h('a', { class: 'btn cg-banner-go', href: '#/admin/settings', text: 'Open Settings' }) : null);
 }
 
 /** A small wireframe of a screen's layout: split (main + rail), focus (stacked bands) or grid (tiles). */
