@@ -79,3 +79,11 @@ test('F5/F6: no key is read straight from the environment or hard-coded; every c
   assert.deepEqual(spec.connections.map((c) => c.id), ['folders', 'ftp', 'imap']);
   for (const c of spec.connections) for (const f of [...c.fields, ...(c.optional || [])]) assert.ok(spec.settings.some((s) => s.key === f), c.id + ' field ' + f + ' is a setting');
 });
+
+test('F6: Settings exposes connection fields and each outcome links to the live setup screen', () => {
+  const app = read('app.js');
+  const common = read('panes/common.js');
+  assert.match(app, /sc = admin\.settings\.schema, v = admin\.settings\.values/, 'Settings includes connection fields');
+  assert.match(common, /href: '#\/admin\/settings'/, 'demo outcomes open Settings');
+  assert.match(app, /values: \{ \[x\.key\]: null \}/, 'a stored password can be cleared');
+});

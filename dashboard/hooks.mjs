@@ -2,10 +2,8 @@
 //   status() / metrics() / panels() / reports() / run(id) / pane(id) / paneAction(id, action, input, ctx)
 //   paneStatus() / testConnection(id, settings) / onSettings(settings)
 // What the client gets (one tab each): Site documents (watched folder), Contractor file transfers (FTP), Project inbox
-// (IMAP triage) and the Activity record (SQLite). The cross-outcome tabs (Client outcomes, Action history, Site map,
-// Screens, Demo data, Outside services, Connection health, Keys in Settings) are built by ./outcomes.mjs from the same
-// records. Folder, FTP and mailbox details are Settings (getSettings(); never the environment directly). A monitor
-// in agent.config.json (AGENT_CONFIG) with the same name as a Settings one is replaced by the Settings version.
+// (IMAP triage) and the Activity record (SQLite). Overview combines their live states. Folder, FTP and mailbox
+// details are Settings (getSettings(); never the environment directly).
 // Database: AGENT_DB (default dashboard/data/agent.db).
 //
 // Demo data per screen: an outcome whose service is not set up yet shows the seeded demo records (marked
@@ -55,9 +53,9 @@ export function parseRules(text) {
 }
 const serialiseRules = (rules) => rules.map((r) => r.name + ': ' + r.subject).join('\n');
 
-/** The agent config: agent.config.json plus the monitors described by Settings. Settings win over a same-name monitor in the file. */
+/** Dashboard monitors use only values saved in Settings. The config file may still set loop timing. */
 export function configFromSettings(file = {}, s = getSettings()) {
-  const out = { ...file, folders: [...(file.folders || [])], ftp: [...(file.ftp || [])], imap: [...(file.imap || [])] };
+  const out = { tickMs: file.tickMs, folders: [], ftp: [], imap: [] };
   const put = (list, m) => { const i = list.findIndex((x) => x.name === m.name); if (i >= 0) list.splice(i, 1, m); else list.push(m); };
   if (s.watch_folder) put(out.folders, { name: 'site', path: String(s.watch_folder), intervalMs: 2000, settleMs: 1000, recursive: true });
   if (s.ftp_host && s.ftp_user && s.ftp_password) {
@@ -227,7 +225,7 @@ function kindState(kind) {
   const tasks = agent.snapshot().tasks.filter((t) => t.kind === kind);
   return { tasks, configured: tasks.length > 0, failed: tasks.filter((t) => t.state && t.state.status === 'failed'), stale: staleIds(tasks), running: tasks.some((t) => t.inflight), last: tasks.map(lastRun).filter(Boolean).sort().pop() || null };
 }
-const NEEDS = { documents: 'Add the site folder in Keys in Settings', transfers: 'Add the FTP host, user and password in Keys in Settings', inbox: 'Add the mailbox host, user and password in Keys in Settings' };
+const NEEDS = { documents: 'Add the site folder in Settings', transfers: 'Add the FTP host, user and password in Settings', inbox: 'Add the mailbox host, user and password in Settings' };
 const missingOf = (connId) => { const c = kit.connections().find((x) => x.id === connId); return c ? c.missing.map(O.settingLabel) : []; };
 
 /** A tab whose service is not set up shows the demo records, marked as such, with what it waits for. */
@@ -415,7 +413,7 @@ async function buildWorld() {
   else if (R.configError) problem = { headline: 'Config error', detail: R.configError };
   const stale = staleIds(tasks);
   const low = recent.length >= 5 && success < cfg().target;
-  if (!tasks.length) idle = { headline: 'Idle', detail: 'No outcome is set up yet. Add the site folder, FTP or mailbox login in Keys in Settings.' };
+  if (!tasks.length) idle = { headline: 'Idle', detail: 'No outcome is set up yet. Add the site folder, FTP or mailbox login in Settings.' };
   else if (!snap.running) idle = { headline: 'Stopped', detail: 'The agent loop is not running' };
   else if (stale.length) idle = { headline: 'Stale', detail: plural(stale.length, 'outcome has', 'outcomes have') + ' not run for over ' + Math.round(cfg().staleMs / 60000) + ' min' };
   else if (low) idle = { headline: 'Below target', detail: 'Success rate ' + success + '% is under the ' + cfg().target + '% target' };
@@ -464,7 +462,7 @@ export async function metrics() {
     { key: 'emailBacklog', label: 'Inbox backlog', value: inb.summary.backlog, unit: '', trend: [inb.summary.backlog], good: 'down', pane: 'inbox' },
     { key: 'logRows', label: 'Events on record', value: act.summary.rows, unit: '', trend: t(act.events), good: 'up', pane: 'activity-log' },
     { key: 'dbIntegrity', label: 'Record integrity', value: act.summary.integrity ? 100 : 0, unit: '%', trend: [act.summary.integrity ? 100 : 0], good: 'up', pane: 'activity-log' }
-  ];
+  ].filter((m) => SPEC.metrics.some((s) => s.key === m.key));
 }
 
 /** One row per monitor: name, state chip, last run, queue depth. */
@@ -493,7 +491,7 @@ const summarise = (results) => {
   const failed = results.filter((r) => r.status !== 'ok');
   return { ok: failed.length === 0, message: results.length + ' task(s) run, ' + failed.length + ' failed' + (failed.length ? ': ' + failed.map((f) => f.id + ' (' + f.error + ')').join('; ').slice(0, 300) : ''), output: results.map(({ id: i, status, attempts }) => ({ id: i, status, attempts })) };
 };
-const NO_MONITORS = 'No monitors configured: add the site folder, FTP or mailbox login in Keys in Settings';
+const NO_MONITORS = 'No monitors configured: add the site folder, FTP or mailbox login in Settings';
 const NOT_YOURS = 'That outcome is not part of your access.';
 
 /** Run one outcome's monitors; an outcome that is not set up runs on its demo records instead, and says so. */
@@ -543,7 +541,7 @@ async function snapshot() {
 
 async function testAll() {
   const ready = kit.connections().filter((c) => c.ready);
-  if (!ready.length) return { ok: false, message: 'No connection has its keys yet: add them in Keys in Settings' };
+  if (!ready.length) return { ok: false, message: 'No connection has its keys yet: add them in Settings' };
   const out = [];
   for (const c of ready) { const r = await testConnection(c.id, getSettings()); kit.saveConnectionTest(c.id, r); out.push([c, r]); }
   invalidate();

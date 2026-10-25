@@ -3,9 +3,8 @@
 // each pane's records, metrics, panels and live states, so live and demo screens can never drift apart.
 //
 // The client outcomes (one tab each): Site documents filed from the watched folder, Contractor file transfers over
-// FTP, the Project inbox triaged over IMAP, and the Activity record kept on this Mac. The other tabs look across
-// those outcomes: Client outcomes, Action history, Site map, Screens, Demo data, Outside services, Connection
-// health and Keys in Settings.
+// FTP, the Project inbox triaged over IMAP, and the Activity record kept on this Mac. Setup and connection health
+// belong to the admin shell; the overview covers all outcomes.
 //
 // Access rule used everywhere: a signed-in client sees rows only for the outcomes (tabs) they were given. Panels
 // and metrics (shared by every user of a pane) carry counts, never records.
@@ -34,7 +33,7 @@ export const PANE = {
 };
 
 export const OUTCOMES = [
-  { id: 'documents', title: 'Site documents', short: 'Documents', outcome: 'Site drawings filed on arrival', fedBy: 'Site folder watcher', connection: 'folders', kind: 'folder', action: 'scan-folders', verb: 'scan', button: 'Scan site folders', one: 'document filed', many: 'documents filed', live: 'the site folder is saved in Keys in Settings' },
+  { id: 'documents', title: 'Site documents', short: 'Documents', outcome: 'Site drawings filed on arrival', fedBy: 'Site folder watcher', connection: 'folders', kind: 'folder', action: 'scan-folders', verb: 'scan', button: 'Scan site folders', one: 'document filed', many: 'documents filed', live: 'the site folder is saved in Settings' },
   { id: 'transfers', title: 'Contractor file transfers', short: 'Transfers', outcome: 'Contractor files mirrored offsite', fedBy: 'Contractor FTP sync', connection: 'ftp', kind: 'ftp', action: 'sync-ftp', verb: 'sync', button: 'Sync FTP now', one: 'file transferred', many: 'files transferred', live: 'the FTP host, user and password are saved' },
   { id: 'inbox', title: 'Project inbox', short: 'Inbox', outcome: 'RFIs and invoices triaged from the inbox', fedBy: 'Project mailbox (IMAP)', connection: 'imap', kind: 'imap', action: 'check-inbox', verb: 'check', button: 'Check inbox now', one: 'email triaged', many: 'emails triaged', live: 'the mailbox host, user and password are saved' },
   { id: 'activity-log', title: 'Activity record', short: 'Record', outcome: 'Every action traceable', fedBy: 'Activity record on this Mac', connection: null, kind: null, action: 'check-database', verb: 'check', button: 'Check the record', one: 'event on record', many: 'events on record', live: 'the agent runs on this Mac (the demo switch goes off)' }
@@ -285,7 +284,7 @@ export function statusOf(w) {
   const lastMin = w.lastRunAt ? Math.max(0, Math.round((w.now - Date.parse(w.lastRunAt)) / 60000)) : null;
   let mood = 'ok', headline = 'Healthy', detail = live + ' of ' + os.length + ' outcomes live' + (demo ? ', ' + demo + ' on demo data' : '');
   if (w.problem) { mood = 'bad'; headline = w.problem.headline; detail = w.problem.detail; }
-  else if (failing) { mood = 'bad'; headline = 'Failing'; detail = plural(failing, 'outcome is', 'outcomes are') + ' failing; open the Site map'; }
+  else if (failing) { mood = 'bad'; headline = 'Failing'; detail = plural(failing, 'outcome is', 'outcomes are') + ' failing; open the affected outcome'; }
   else if (w.idle) { mood = 'wait'; headline = w.idle.headline; detail = w.idle.detail; }
   else if (warn) { mood = 'wait'; headline = 'Needs a look'; detail = plural(warn, 'outcome needs', 'outcomes need') + ' a look'; }
   else if (w.working) { mood = 'run'; headline = 'Working'; detail = plural(w.working, 'task', 'tasks') + ' running now'; }
@@ -305,12 +304,12 @@ export function metaMetrics(w) {
   return [
     { key: 'errors', label: 'Errors', value: errHours.reduce((a, b) => a + b, 0), unit: '', trend: errHours, good: 'down', pane: 'overview' },
     { key: 'activeTasks', label: 'Working now', value: w.working || 0, unit: '', trend: [w.working || 0], good: 'down', pane: 'overview' },
-    { key: 'outcomes', label: 'Outcomes delivered', value: oc.metrics.delivered, unit: '', trend: [oc.metrics.delivered], good: 'up', pane: PANE.outcomes },
+    { key: 'outcomes', label: 'Outcomes delivered', value: oc.metrics.delivered, unit: '', trend: [oc.metrics.delivered], good: 'up', pane: 'overview' },
     { key: 'live', label: 'Running on live data', value: oc.metrics.livePct, unit: '%', trend: [oc.metrics.livePct], good: 'up', pane: PANE.outcomes },
-    { key: 'runs', label: 'Runs today', value: hi.summary.runsToday, unit: '', trend: runHours, good: 'up', pane: PANE.history },
+    { key: 'runs', label: 'Runs today', value: hi.summary.runsToday, unit: '', trend: runHours, good: 'up', pane: 'overview' },
     { key: 'failed', label: 'Failed', value: hi.summary.failedToday, unit: '', trend: errHours, good: 'down', pane: PANE.history },
     { key: 'avg', label: 'Avg duration', value: hi.summary.avgS, unit: 's', trend: hi.durations.values.length ? hi.durations.values : [0], good: 'down', pane: PANE.history },
-    { key: 'success', label: 'Success rate', value: w.success == null ? 0 : w.success, unit: '%', trend: [w.success == null ? 0 : w.success], good: 'up', pane: PANE.map },
+    { key: 'success', label: 'Success rate', value: w.success == null ? 0 : w.success, unit: '%', trend: [w.success == null ? 0 : w.success], good: 'up', pane: 'overview' },
     { key: 'last', label: 'Last run', value: lastMin, unit: 'min', trend: [lastMin], good: 'down', pane: PANE.map },
     { key: 'screens', label: 'Screens ready', value: sc.summary.ready, unit: '', trend: [sc.summary.ready], good: 'up', pane: PANE.screens },
     { key: 'empty', label: 'Screens without data', value: sc.summary.empty, unit: '', trend: [sc.summary.empty], good: 'down', pane: PANE.screens },
@@ -327,7 +326,7 @@ export function metaPanels(w) {
   const line = (title, name, b, pane) => ({ title, kind: 'line', labels: b.labels, series: [{ name, values: b.values }], pane });
   return [
     line('Activity', 'Items handled', w.handledHours, 'overview'),
-    { title: 'Latest results', kind: 'table', columns: ['Item', 'Status', 'Updated'], rows: hi.runs.slice(0, 8).map((r) => [r.label, (r.ok ? '✓ ' : '✕ ') + r.message, rel(r.at, w.now)]), pane: PANE.history },
+    { title: 'Latest results', kind: 'table', columns: ['Item', 'Status', 'Updated'], rows: hi.runs.slice(0, 8).map((r) => [r.label, (r.ok ? '✓ ' : '✕ ') + r.message, rel(r.at, w.now)]), pane: 'overview' },
     { title: 'Coverage by outcome', kind: 'bar', labels: oc.coverage.labels, series: [{ name: 'Items handled today', values: oc.coverage.values }], pane: PANE.outcomes },
     { title: 'Needs a key', kind: 'list', columns: ['Outcome', 'Missing'], rows: oc.needsKey.map((n) => [n.outcome, n.missing]), pane: PANE.outcomes },
     { title: 'Screen readiness', kind: 'table', columns: sc.columns, rows: sc.rows, pane: PANE.screens },

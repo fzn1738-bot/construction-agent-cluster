@@ -2,7 +2,7 @@
 // site (Harlow Build, a four-storey office fit-out). The server serves this while no outcome is set up. Everything
 // here is in memory: nothing touches the real folder, FTP server, mailbox or database, and buttons add records so
 // every screen can be tried. Two screens are deliberately real even here, because they are how you leave the demo:
-// Keys in Settings and Outside services show (masked) what is really saved, and saving a key there really saves it.
+// The admin Settings and Connections screens show what is really saved, and saving a key there uses the live connection.
 // hooks.mjs also borrows these records for any single outcome that is not set up yet.
 import fs from 'node:fs';
 import path from 'node:path';
@@ -220,7 +220,7 @@ export async function metrics() {
     { key: 'emailBacklog', label: 'Inbox backlog', value: 0, unit: '', trend: [2, 1, 0, 0], good: 'down', pane: 'inbox' },
     { key: 'logRows', label: 'Events on record', value: logRows(), unit: '', trend: [3380, 3392, 3401, 3410, logRows()], good: 'up', pane: 'activity-log' },
     { key: 'dbIntegrity', label: 'Record integrity', value: 100, unit: '%', trend: [100, 100, 100], good: 'up', pane: 'activity-log' }
-  ];
+  ].filter((m) => SPEC.metrics.some((s) => s.key === m.key));
 }
 
 export async function panels() {
@@ -357,7 +357,7 @@ export async function paneAction(id, action, input, ctx = {}) {
     const ids = action === 'test-all' ? ['folders', 'ftp', 'imap'] : [String(inp.id || '')];
     if (!ids.every((x) => x === 'database' || st.tests[x])) return { ok: false, message: 'No such connection' };
     for (const x of ids) if (st.tests[x]) st.tests[x] = { ...st.tests[x], at: nowIso() };
-    return fresh({ ok: true, message: 'Demo: ' + ids.join(', ') + ' reachable. Enter your own details in Keys in Settings to test the real services.' });
+    return fresh({ ok: true, message: 'Demo: ' + ids.join(', ') + ' reachable. Enter your own details in Settings to test the real services.' });
   }
   // the real way out of the demo: these change and test the real keys
   if ((id === PANE.keys && (action === 'save-key' || action === 'clear-key')) || (id === PANE.services && (action === 'test' || action === 'test-all')) || (id === PANE.demo && action === 'auto')) {

@@ -33,7 +33,7 @@ test('F3: every pane screen renders its own records (demo data) with its planned
 test('F3: outcome screens show their real records, and a tab without keys shows demo records marked as such', async () => {
   const r = root(); await (await screen('documents')).render(r, paneCtx(hooks, 'documents'));
   assert.match(r.textContent, /Showing demo records/);
-  assert.match(r.textContent, /Add the site folder in Keys in Settings/);
+  assert.match(r.textContent, /Add the site folder in Settings/);
   assert.match(r.textContent, /A-101_Level2_Plan_RevC\.pdf/, 'demo rows still fill the screen');
   const a = root(); await (await screen('activity-log')).render(a, paneCtx(hooks, 'activity-log'));
   assert.doesNotMatch(a.textContent, /Showing demo records/, 'the record on this Mac is always live');

@@ -7,8 +7,9 @@ import { openStore } from '../src/sqlite-utils.mjs';
 
 const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'dash-boot-'));
 const watch = path.join(dir, 'watch'); fs.mkdirSync(watch);
-fs.writeFileSync(path.join(dir, 'cfg.json'), JSON.stringify({ tickMs: 20, folders: [{ name: 'drawings', path: watch, intervalMs: 50, settleMs: 0 }] }));
 process.env.HQ_APP_DATA = path.join(dir, 'data'); process.env.AGENT_DB = path.join(dir, 'a.db'); process.env.AGENT_CONFIG = path.join(dir, 'cfg.json'); delete process.env.AGENT_AUTOSTART;
+const { saveSettings } = await import('../dashboard/store.mjs');
+saveSettings({ watch_folder: watch });
 const { start } = await import('../dashboard/server.mjs');
 const { adminKey } = await import('../dashboard/store.mjs');
 const H = { 'x-app-key': adminKey() };
@@ -42,7 +43,7 @@ test('the loop starts with the server, before any page or API request', async ()
     const hooks = await import('../dashboard/hooks.mjs');
     const mons = hooks.monitorTable();
     assert.deepEqual(mons.columns, ['Monitor', 'State', 'Last run', 'Queue']);
-    assert.equal(mons.rows[0][0], 'Folder · drawings');
+    assert.equal(mons.rows[0][0], 'Folder · site');
     assert.ok(['OK', 'Running'].includes(mons.rows[0][1].text), 'state chip ' + JSON.stringify(mons.rows[0][1]));
     assert.match(mons.rows[0][2], /ago$|just now/); assert.equal(typeof mons.rows[0][3], 'number');
   } finally {

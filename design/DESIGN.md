@@ -65,23 +65,20 @@ System stacks only (strict CSP): `ui-sans-serif, SF Pro Text, Segoe UI` for UI; 
 - Don't use identical tile rows on different tabs; don't use green/amber/red decoratively; don't use placeholder text.
 
 ## Panes
-Each pane has one primary view and 1-3 metrics at most. Sketches are mobile order; desktop notes follow `→`. Empty states always say what to do next. Clients see all panes (client: true) except that keys are shown masked.
+Each sidebar pane is a client outcome. Overview shows their combined state; setup, connection checks, users, control and reports live in the existing HQ shell. A client sees only the outcome panes granted to their access code. A missing connection shows visibly marked demo records on that outcome until Settings has its required fields.
 
-Sidebar order as built: Client outcomes, then the four client outcomes (Site documents, Contractor file transfers, Project inbox, Activity record — each its own screen: file list, transfer timeline, message queue, event ledger), then Action history, Site map, Screens, Demo data, Outside services (setup checklist per service), Connection health (the "Connections" pane below) and Keys in Settings. Inside the tabs that look across outcomes a client only sees the rows of the outcomes they were given; an outcome whose keys are missing shows its demo records under a "Showing demo records" banner until they are saved.
+1. **Site documents** (split): arrivals file list and folder rail, with filter, scan button and admin folder form. Empty: “Nothing has arrived yet.”
+2. **Contractor file transfers** (focus): throughput and transfer timeline, failure detail, sync button and admin direction control. Empty: “No transfers yet.”
+3. **Project inbox** (split): message queue and triage rules, with rule filter, check button and admin rule editor. Empty: “No messages triaged yet.”
+4. **Activity record** (grid): filterable event ledger with record integrity, check button and CSV export. Empty: “No events yet.”
 
-1. **Re-plan… → "Client outcomes"** (split). Left: outcome table (Outcome, Fed by, Tab, Status). Right rail: two metrics (Outcomes delivered, Running on live data) over a "Coverage by outcome" bar. → list left 8 cols, rail 4. Empty: "No outcomes yet — run the scan to discover what the agent delivers." Client sees what they get and which part waits on a key.
-2. **Give each tab a real screen → "Screens"** (grid). A 2-up card grid, one card per screen with a mini wireframe thumbnail of its layout, data chip, and actions. Metrics strip: Screens ready, Screens without data. Empty: "Every screen shows demo data until connected."
-3. **Working actions → "Action history"** (focus). Top: large run buttons row (Scan folders, Sync FTP, Check inbox) with Runs today as the 44px number; below, full-width duration line, then history table with result text. Empty: "No runs yet. Press Scan folders."
-4. **Connections** (grid). Four service cards (folder, FTP, IMAP, SQLite), each with state dot+word, endpoint in mono, latency, "Test" button; below a latency line with direct labels. Empty: "No connections configured — add keys in Settings."
-5. **Keys in Settings** (split). Left: stored keys list, values masked (last 4 only). Right: add/replace form, "Save and test" button; result chip appears inline. Empty: "No keys saved. Demo data is showing."
-6. **Demo data** (focus). Wide stacked bar per screen (live vs demo rows), then source table with "Switches to live when". A banner states how many screens are on demo data. Empty: "Everything is live."
-7. **Overview visual** (focus). The centrepiece below, plus Success rate and Last run beneath; outcome status table underneath.
+Each screen uses its own records from the solution's SQLite log, local folder, FTP or IMAP agent. Its 1–2 metrics and 2 panels are tagged with that pane. Overview owns aggregate runs, success and errors.
 
 ## Centrepiece (Overview) — "Site plan orb"
 Built as `dashboard/public/hero.js` on a canvas/SVG, keeping the orb as the heart.
 - **Core:** a central orb (radius ≈ 22% of the shorter side) in the mood colour (`--orb-ok` healthy, `--orb-run` running, `--orb-wait` caution, `--orb-bad` failing), radial-gradient glow, breathing scale 1→1.04 over `--breath` (7s). Inside: primary number (Success rate, 44px) and headline word ("Healthy").
 - **Site-plan grid:** faint blueprint grid (`--rule`, 1px, 24px cells) with slow parallax; two concentric thin survey rings at 1.4× and 1.9× radius, dashed, rotating 120s and 180s.
-- **Pane nodes:** seven small rounded-square nodes (one per pane/outcome) on the outer ring, labelled in 12px ink-2; node fill = state colour (`--ok`, `--warn`, `--bad`; demo nodes accent-soft with dashed outline), plus a glyph character (✓ ! ✕ D) so colour is never alone. Each node's line to the core is a thin path carrying moving dots (speed ∝ recent activity); a stalled path is static, so freezing reads as trouble.
+- **Pane nodes:** four small rounded-square nodes (one per client outcome) on the outer ring, labelled in 12px ink-2; node fill = state colour (`--ok`, `--warn`, `--bad`; demo nodes accent-soft with dashed outline), plus a glyph character (✓ ! ✕ D) so colour is never alone. Each node's line to the core is a thin path carrying moving dots (speed ∝ recent activity); a stalled path is static, so freezing reads as trouble.
 - **Ring captions:** Runs today, Success, Last run placed at 10, 2 and 6 o'clock using `--ring-1..3`, value 20px + label 12px.
 - **Mobile:** nodes flow onto a single ring at 90% width; labels abbreviate; motion respects `prefers-reduced-motion` (static, no rotation).
 - **Dark mode:** glow stronger, grid at 40% opacity.

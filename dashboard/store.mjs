@@ -73,6 +73,10 @@ export function saveSettings(values) {
   for (const s of settingsSchema()) {
     if (!(s.key in values)) continue;
     let v = values[s.key];
+    if (v === null) {
+      if (cur[s.key] !== undefined) { delete cur[s.key]; changed.push(s.key); }
+      continue;
+    }
     if (s.type === 'secret' && (v === '' || v === '••••••')) continue;   // left blank: keep the saved secret
     if (s.type === 'number') { v = Number(v); if (!Number.isFinite(v)) continue; }
     else if (s.type === 'toggle') v = v === true || v === 'true' || v === 'on' || v === 1;

@@ -9,6 +9,8 @@ const watch = path.join(dir, 'watch'); fs.mkdirSync(watch);
 fs.writeFileSync(path.join(dir, 'cfg.json'), JSON.stringify({ folders: [{ name: 'w', path: watch, intervalMs: 50, settleMs: 0 }] }));
 process.env.HQ_APP_DATA = path.join(dir, 'data');
 process.env.AGENT_DB = path.join(dir, 'a.db'); process.env.AGENT_CONFIG = path.join(dir, 'cfg.json'); process.env.AGENT_AUTOSTART = '0';
+const { saveSettings } = await import('../dashboard/store.mjs');
+saveSettings({ watch_folder: watch });
 const hooks = await import('../dashboard/hooks.mjs');
 const metric = async (k) => (await hooks.metrics()).find((m) => m.key === k).value;
 
@@ -17,7 +19,9 @@ test('dashboard hooks reflect real agent state after a scan', async () => {
   let s = await hooks.status();
   assert.equal(s.primary.label, 'Success rate');
   assert.deepEqual(s.ring.map((r) => r.label), ['Runs today', 'Success', 'Last run']);
-  await hooks.run('scan-folders'); const r = await hooks.run('scan-folders');
+  await hooks.run('scan-folders');
+  await new Promise((resolve) => setTimeout(resolve, 1100));
+  const r = await hooks.run('scan-folders');
   assert.equal(r.ok, true); assert.match(r.message, /1 task\(s\) run, 0 failed/);
   s = await hooks.status();
   assert.equal(s.headline, 'Stopped', 'loop not autostarted in this test'); assert.equal(s.mood, 'wait');
@@ -67,14 +71,16 @@ test('counts are transfers and processed emails, not routine successful polls', 
   } finally { w.close(); }
 });
 
-test('Settings win over a same-name monitor in agent.config.json', () => {
+test('dashboard connections use Settings and ignore credentials from agent.config.json', () => {
   const file = { folders: [{ name: 'site', path: '/old/path' }], ftp: [{ name: 'site', host: 'old.example', user: 'u', password: 'p' }], imap: [{ name: 'pm', host: 'old-mail.example' }, { name: 'other', host: 'keep.example' }] };
   const out = hooks.configFromSettings(file, { watch_folder: '/new/path', ftp_host: 'new.example', ftp_user: 'bob', ftp_password: 'pw', ftp_direction: 'both', imap_host: 'mail.example', imap_user: 'u', imap_password: 'p', imap_rules: 'rfi: RFI' });
   assert.deepEqual(out.folders.map((f) => f.path), ['/new/path']);
   assert.deepEqual(out.ftp.map((f) => [f.host, f.direction]), [['new.example', 'both']]);
-  assert.deepEqual(out.imap.map((m) => m.host), ['mail.example', 'keep.example'], 'other file monitors stay');
+  assert.deepEqual(out.imap.map((m) => m.host), ['mail.example']);
   assert.deepEqual(out.imap[0].rules.map((r) => r.name), ['rfi']);
-  assert.deepEqual(hooks.configFromSettings(file, {}).folders[0].path, '/old/path', 'without settings the file is used');
+  assert.deepEqual(hooks.configFromSettings(file, {}).folders, [], 'without Settings there is no live folder');
+  assert.deepEqual(hooks.configFromSettings(file, {}).ftp, [], 'file credentials cannot bypass Settings');
+  assert.deepEqual(hooks.configFromSettings(file, {}).imap, [], 'file credentials cannot bypass Settings');
 });
 
 test('concurrent settings saves, polls and runs rebuild one runtime at a time', async () => {

@@ -391,12 +391,11 @@ export class ImapMonitor {
   }
 }
 
-/** Build monitors from a config object (see agent.config.example.json). Passwords come from env vars via passwordEnv. */
+/** Build monitors from a config object. The dashboard supplies credentials from saved Settings. */
 export function buildMonitors(config, store) {
-  const pw = (o) => (o.passwordEnv ? process.env[o.passwordEnv] || '' : o.password || '');
   return [
     ...(config.folders || []).map((f) => new FolderMonitor({ ...f, dir: f.path, onAdd: f.action, store })),
-    ...(config.ftp || []).map((f) => new FtpMonitor({ ...f, password: pw(f), store })),
-    ...(config.imap || []).map((m) => new ImapMonitor({ ...m, password: pw(m), store }))
+    ...(config.ftp || []).map((f) => new FtpMonitor({ ...f, password: f.password || '', store })),
+    ...(config.imap || []).map((m) => new ImapMonitor({ ...m, password: m.password || '', store }))
   ];
 }

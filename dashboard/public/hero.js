@@ -1,11 +1,5 @@
-// Overview centrepiece: the "site plan orb". A glowing core (headline state and success rate) inside a blueprint
-// grid, with one node per client outcome (Site documents, Contractor file transfers, Project inbox, Activity record)
-// on the outer ring and a small bead per cross-outcome tab (Client outcomes, Action history, Site map, Screens,
-// Demo data, Outside services, Connection health, Keys) on the inner survey ring. Each node carries its live state
-// (✓ ! ✕, D for demo data); the line from an outcome to the core carries moving dots when work flows and goes
-// still when it stalls. Every node is also a real button below the canvas, so the state is readable without sight
-// and without motion. Respects prefers-reduced-motion (one still frame, redrawn on change). Also used by the Site
-// map tab (panes/a-futuristic-overview-visual-s.js) with that tab's own data.
+// Overview centrepiece: a blueprint site plan with a glowing state orb and one live node per client outcome.
+// Each node has an accessible text button; motion stops for prefers-reduced-motion.
 
 const GLYPH = { ok: '✓', warn: '!', bad: '✕', idle: '–' };
 const STATE_WORD = { ok: 'Healthy', warn: 'Needs a look', bad: 'Failing', idle: 'Waiting for setup' };

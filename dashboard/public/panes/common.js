@@ -13,11 +13,9 @@ export const TONE = { ok: 'ok', Filed: 'ok', Matched: 'ok', OK: 'ok', Updated: '
 export function chip(h, text, tone = '') { return h('span', { class: 'cg-chip ' + (tone || ''), text }); }
 export const demoChip = (h, d) => (d && d.source === 'demo' ? chip(h, 'Demo data', 'demo') : null);
 
-export const KEYS_PANE = 'keys-entered-in-settings';
-
 /**
  * A screen showing demo records says so, and what makes it live. While its own service is not set up an outcome
- * tab shows demo records (d.configured false); the admin gets a link to Keys in Settings.
+ * tab shows demo records (d.configured false); the admin gets a link to Settings.
  */
 export function demoBanner(ctx, d) {
   const { h } = ctx;
@@ -27,7 +25,7 @@ export function demoBanner(ctx, d) {
     h('div', { class: 'cg-head' }, h('h3', { text: own ? 'Showing demo records' : 'Demo data' }), chip(h, 'Demo data', 'demo')),
     h('p', { class: 'cg-note', text: own ? (d.needs || 'Enter the keys for this service') + ' to see your own records here. Buttons work on the demo records until then.' : 'Every number on this screen is a demo sample until the keys are saved.' }),
     own && d.missing && d.missing.length ? h('p', { class: 'cg-note', text: 'Still missing: ' + d.missing.join(', ') }) : null,
-    ctx.me.role === 'admin' ? h('div', { class: 'cg-actions' }, h('a', { class: 'btn', href: '#/pane/' + KEYS_PANE, text: 'Open Keys in Settings' })) : null);
+    ctx.me.role === 'admin' ? h('div', { class: 'cg-actions' }, h('a', { class: 'btn', href: '#/admin/settings', text: 'Open Settings' })) : null);
 }
 
 /** A small wireframe of a screen's layout: split (main + rail), focus (stacked bands) or grid (tiles). */

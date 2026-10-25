@@ -409,10 +409,9 @@ test('F4: UIDVALIDITY change restarts from the beginning; restart resumes from c
   } finally { await srv.close(); }
 });
 
-test('buildMonitors creates monitors from config and reads passwords from env', () => {
-  process.env.TEST_PW = 's3';
+test('buildMonitors creates monitors with supplied credentials', () => {
   const store = openStore(':memory:');
-  const ms = buildMonitors({ folders: [{ name: 'f', path: tmp() }], ftp: [{ name: 'x', host: 'h', user: 'u', passwordEnv: 'TEST_PW', localDir: tmp() }], imap: [{ name: 'm', host: 'h', user: 'u', passwordEnv: 'TEST_PW' }] }, store);
+  const ms = buildMonitors({ folders: [{ name: 'f', path: tmp() }], ftp: [{ name: 'x', host: 'h', user: 'u', password: 's3', localDir: tmp() }], imap: [{ name: 'm', host: 'h', user: 'u', password: 's3' }] }, store);
   assert.deepEqual(ms.map((m) => m.id), ['folder:f', 'ftp:x', 'imap:m']);
   assert.equal(ms[1].makeClient().password, 's3');
 });

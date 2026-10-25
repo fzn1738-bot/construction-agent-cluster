@@ -14,12 +14,12 @@ test('with no monitors configured the orb says Idle and Run Now fails instead of
   assert.deepEqual(boot, { tasks: 0, running: false, configError: null });
   const s = await hooks.status();
   assert.equal(s.headline, 'Idle'); assert.equal(s.mood, 'wait');
-  assert.match(s.detail, /Keys in Settings/);
+  assert.match(s.detail, /Settings/);
   const r = await hooks.run('run');
   assert.equal(r.ok, false); assert.match(r.message, /No monitors configured/);
   const st = await hooks.paneStatus();
   assert.deepEqual(['documents', 'transfers', 'inbox'].map((k) => [st[k].state, st[k].demo]), [['idle', true], ['idle', true], ['idle', true]], 'unconfigured tabs wait for their keys, on demo records');
-  assert.match(st.documents.text, /Keys in Settings/);
+  assert.match(st.documents.text, /Settings/);
   const docs = await hooks.pane('documents');
   assert.equal(docs.configured, false); assert.equal(docs.source, 'demo');
   assert.ok(docs.arrivals.length > 5, 'the tab is not empty: it shows demo records');
