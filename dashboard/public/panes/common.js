@@ -21,11 +21,13 @@ export function demoBanner(ctx, d) {
   const { h } = ctx;
   if (!d || d.source !== 'demo') return null;
   const own = d.configured === false;
-  return h('section', { class: 'cg-card cg-banner', role: 'note' },
-    h('div', { class: 'cg-head' }, h('h3', { text: own ? 'Showing demo records' : 'Demo data' }), chip(h, 'Demo data', 'demo')),
-    h('p', { class: 'cg-note', text: own ? (d.needs || 'Enter the keys for this service') + ' to see your own records here. Buttons work on the demo records until then.' : 'Every number on this screen is a demo sample until the keys are saved.' }),
-    own && d.missing && d.missing.length ? h('p', { class: 'cg-note', text: 'Still missing: ' + d.missing.join(', ') }) : null,
-    ctx.me.role === 'admin' ? h('div', { class: 'cg-actions' }, h('a', { class: 'btn', href: '#/admin/settings', text: 'Open Settings' })) : null);
+  return h('section', { class: 'cg-banner', role: 'note' },
+    chip(h, 'Demo data', 'demo'),
+    h('div', { class: 'cg-banner-text' },
+      h('b', { text: own ? 'Showing demo records' : 'Sample numbers' }),
+      h('span', { text: own ? (d.needs || 'Enter the keys for this service') + ' to see your own records here. Buttons work on the demo records until then.' : 'Every number on this screen is a demo sample until the keys are saved.' }),
+      own && d.missing && d.missing.length ? h('small', { text: 'Still missing: ' + d.missing.join(', ') }) : null),
+    ctx.me.role === 'admin' ? h('a', { class: 'btn', href: '#/admin/settings', text: 'Open Settings' }) : null);
 }
 
 /** A small wireframe of a screen's layout: split (main + rail), focus (stacked bands) or grid (tiles). */
@@ -107,6 +109,30 @@ export function chips(h, options, current, onPick, label) {
 }
 
 export const line = (ctx, title, name, hours) => ctx.chart({ title, kind: 'line', labels: hours.labels, series: [{ name, values: hours.values }] });
+
+/**
+ * A 24-hour trend that fills its card at any width: the area and line stretch (strokes stay 2px), while the
+ * axis words are HTML on the type scale, so they never shrink in a narrow rail. Falls back to the kit chart.
+ */
+export function trend(ctx, title, unit, hours) {
+  const { h, s } = ctx;
+  const values = ((hours && hours.values) || []).map((v) => Number(v) || 0);
+  if (!s || values.length < 2) return line(ctx, title, unit, hours || { labels: [], values: [] });
+  const total = values.reduce((a, v) => a + v, 0);
+  const hi = Math.max(...values, 1);
+  const peak = values.indexOf(Math.max(...values));
+  const W = 100, H = 40, x = (i) => (W * i) / (values.length - 1), y = (v) => H - 2 - ((H - 4) * v) / hi;
+  const pts = values.map((v, i) => x(i).toFixed(2) + ' ' + y(v).toFixed(2));
+  const svg = s('svg', { class: 'cg-trend-svg', viewBox: `0 0 ${W} ${H}`, preserveAspectRatio: 'none', 'aria-hidden': 'true' });
+  for (const g of [0.5, 1]) svg.append(s('line', { class: 'cg-trend-grid', x1: 0, x2: W, y1: y(hi * g), y2: y(hi * g), 'vector-effect': 'non-scaling-stroke' }));
+  svg.append(s('path', { class: 'cg-trend-area', d: 'M0 ' + H + ' L' + pts.join(' L') + ' L' + W + ' ' + H + ' Z' }));
+  svg.append(s('path', { class: 'cg-trend-line', d: 'M' + pts.join(' L'), 'vector-effect': 'non-scaling-stroke' }));
+  const label = (hours.labels || [])[peak];
+  return h('figure', { class: 'cg-trend', role: 'img', 'aria-label': title + ': ' + total + ' ' + unit + ', peak ' + values[peak] + (label ? ' at ' + label : '') },
+    h('div', { class: 'cg-trend-head' }, h('b', { text: String(total) }), h('span', { text: unit + ' in 24 hours' }), h('small', { text: 'peak ' + values[peak] + ' an hour' })),
+    h('div', { class: 'cg-trend-plot' }, svg, h('small', { class: 'cg-trend-max', text: String(hi) })),
+    h('div', { class: 'cg-trend-axis', 'aria-hidden': 'true' }, h('small', { text: '24 h ago' }), h('small', { text: '12 h' }), h('small', { text: 'now' })));
+}
 
 /** A records table that becomes stacked label/value cards under 640px (data-label on each cell). */
 export function records(h, columns, rows, { empty = 'Nothing yet.', cell } = {}) {

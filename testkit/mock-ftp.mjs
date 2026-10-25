@@ -49,7 +49,7 @@ export async function startFtp({ user = 'bob', pass = 'secret', files = {}, trun
         case 'RNFR': rnfr = arg; return reply(store.has(arg) ? '350 ready' : '550 no such file');
         case 'RNTO': { store.set(arg, store.get(rnfr)); store.delete(rnfr); return reply('250 renamed'); }
         case 'QUIT': reply('221 bye'); return sock.end();
-        default: return reply('502 not implemented');
+        default: return reply('502 Command not supported by this test server');
       }
     }
   });

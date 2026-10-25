@@ -1,3 +1,37 @@
 {
-  "panes": []
+  "note": "Sidebar tabs are client outcomes only. The request's build checklist (re-plan, real screens, working actions, connections, keys in Settings, demo data, overview visual) is met across these tabs, the Overview centrepiece and HQ's Settings/Connections screens, not as tabs of its own.",
+  "panes": [
+    {
+      "id": "documents",
+      "title": "Site documents",
+      "layout": "split",
+      "composition": "Arrivals list grouped into Last hour / Earlier today / Before today with filter chips; rail: headline number + waiting/failed chips + Scan button, watched folder (path, monitor state, collapsible admin editor), file-type mix bars, 24-hour arrivals trend (total, peak, full-width plot). On phones the headline card comes first, above the list.",
+      "primaryAction": "scan",
+      "empty": "Nothing has arrived yet."
+    },
+    {
+      "id": "transfers",
+      "title": "Contractor file transfers",
+      "layout": "focus",
+      "composition": "Full-width sync band: headline number and chips, Sync button and direction control, and a flow diagram Site ⇄ Contractor FTP with counts and volume each way (inactive direction drawn dashed). Then the failure card (white, red edge) beside the 24-hour trend from 900px, then the full-width paged transfer timeline. The direction control is labelled.",
+      "primaryAction": "sync",
+      "empty": "No transfers yet."
+    },
+    {
+      "id": "inbox",
+      "title": "Project inbox",
+      "layout": "split",
+      "composition": "Full-width triage band: headline number, one proportional bar of where mail went (series colours, labelled legend), and the Check button. Below: paged message queue with rule filter (rules, No rule, Unreadable) beside a rail: rules with colour swatches matching the bar, match counts and a collapsible rule editor; the mailbox card; who writes most.",
+      "primaryAction": "check",
+      "empty": "No messages triaged yet."
+    },
+    {
+      "id": "activity-log",
+      "title": "Activity record",
+      "layout": "grid",
+      "composition": "Three tiles (record size + integrity with Check and Export CSV; events by source; what is stored, in plain words) over a full-width ledger with source and result filters (both counted), sources in plain words (Site folder, FTP, Inbox, Schedule), each event split into a muted source prefix and readable text, paged 15 at a time; two lines per event on phones.",
+      "primaryAction": "check",
+      "empty": "No events yet."
+    }
+  ]
 }

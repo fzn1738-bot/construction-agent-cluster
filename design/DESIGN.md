@@ -67,21 +67,29 @@ System stacks only (strict CSP): `ui-sans-serif, SF Pro Text, Segoe UI` for UI; 
 ## Panes
 Each sidebar pane is a client outcome. Overview shows their combined state; setup, connection checks, users, control and reports live in the existing HQ shell. A client sees only the outcome panes granted to their access code. A missing connection shows visibly marked demo records on that outcome until Settings has its required fields.
 
-1. **Site documents** (split): arrivals file list and folder rail, with filter, scan button and admin folder form. Empty: “Nothing has arrived yet.”
-2. **Contractor file transfers** (focus): throughput and transfer timeline, failure detail, sync button and admin direction control. Empty: “No transfers yet.”
-3. **Project inbox** (split): message queue and triage rules, with rule filter, check button and admin rule editor. Empty: “No messages triaged yet.”
-4. **Activity record** (grid): filterable event ledger with record integrity, check button and CSV export. Empty: “No events yet.”
+1. **Site documents** (split): arrivals grouped into Last hour / Earlier today / Before today, with filter chips; rail with the headline number, waiting/failed chips and the Scan button, the watched folder (path, monitor state, admin editor folded into “Change the watched folder”), a file-type mix and the 24-hour arrivals trend. On phones the headline card and Scan come before the list. Empty: “Nothing has arrived yet.”
+2. **Contractor file transfers** (focus): a full-width sync band (number, chips, Sync button, direction control) with a Site ⇄ Contractor FTP flow diagram showing count and volume each way; the failure card (white with a red edge) beside the 24-hour trend from 900px; then the full-width paged transfer timeline. The direction control is labelled. Empty: “No transfers yet.”
+3. **Project inbox** (split): a full-width triage band with one proportional bar of where mail went (series colours plus a labelled legend) and the Check button; below, the paged message queue (filters: each rule, No rule, Unreadable) beside a rail: rules with colour swatches keyed to the bar, match counts and a folded rule editor; the mailbox; who writes most. Empty: “No messages triaged yet.”
+4. **Activity record** (grid): three tiles (record size and integrity with Check and Export CSV; events by source; what is stored, named in plain words) over a full-width ledger with counted source and result filters, sources in plain words (Site folder, FTP, Inbox, Schedule), each event as a muted source prefix plus readable text (two lines on phones), 15 rows at a time with “Show more”. Empty: “No events yet.”
+
+Every 24-hour trend is the shared `trend()` helper: total and peak as text, a plot that stretches to its card (2px line, soft area), axis words in HTML at 12px so they never shrink in a rail.
+
+Long lists page (12–15 rows, then “Show N more”) so no screen runs to thousands of pixels on a phone. Admin-only editors sit in a collapsed `<details>` so the client view and the admin view share one calm layout. The demo banner is a single compact row: Demo data chip, what it means, Open Settings.
 
 Each screen uses its own records from the solution's SQLite log, local folder, FTP or IMAP agent. Its 1–2 metrics and 2 panels are tagged with that pane. Overview owns aggregate runs, success and errors.
 
 ## Centrepiece (Overview) — "Site plan orb"
-Built as `dashboard/public/hero.js` on a canvas/SVG, keeping the orb as the heart.
-- **Core:** a central orb (radius ≈ 22% of the shorter side) in the mood colour (`--orb-ok` healthy, `--orb-run` running, `--orb-wait` caution, `--orb-bad` failing), radial-gradient glow, breathing scale 1→1.04 over `--breath` (7s). Inside: primary number (Success rate, 44px) and headline word ("Healthy").
-- **Site-plan grid:** faint blueprint grid (`--rule`, 1px, 24px cells) with slow parallax; two concentric thin survey rings at 1.4× and 1.9× radius, dashed, rotating 120s and 180s.
-- **Pane nodes:** four small rounded-square nodes (one per client outcome) on the outer ring, labelled in 12px ink-2; node fill = state colour (`--ok`, `--warn`, `--bad`; demo nodes accent-soft with dashed outline), plus a glyph character (✓ ! ✕ D) so colour is never alone. Each node's line to the core is a thin path carrying moving dots (speed ∝ recent activity); a stalled path is static, so freezing reads as trouble.
-- **Ring captions:** Runs today, Success, Last run placed at 10, 2 and 6 o'clock using `--ring-1..3`, value 20px + label 12px.
-- **Mobile:** nodes flow onto a single ring at 90% width; labels abbreviate; motion respects `prefers-reduced-motion` (static, no rotation).
-- **Dark mode:** glow stronger, grid at 40% opacity.
+Built as `dashboard/public/hero.js` on a canvas, keeping the orb as the heart.
+- **Core:** a central orb (radius ≈ 17% of the shorter side) in the mood colour (`--orb-ok` healthy, `--orb-run` running, `--orb-wait` caution, `--orb-bad` failing), radial glow, breathing 1→1.04 over `--breath` (7s). Inside: Success rate (up to 44px), the headline word and its label.
+- **Success gauge:** a ring just outside the orb filled to the success rate, with ticks every 10%, so the number has a shape.
+- **Site-plan grid:** blueprint grid (`--rule`, 24px cells, a stronger line every 4 cells) drifting slowly; two dashed survey rings turning in opposite directions (120s, 180s); a soft radar sweep from the core turning once a minute.
+- **Outcome nodes:** one rounded-square node per client outcome on the diagonals, label = tab name plus its state line (desktop) or short name (phone), measured so labels never leave the stage. Fill = state colour with a glyph (✓ ! ✕ –); demo nodes keep the same state glyph on a white fill with a dashed outline (no letter codes). A faint halo marks warn/bad nodes. Each node's link to the core carries moving dots (fast when healthy, slow when it needs a look, none when failing or waiting), so a frozen link reads as trouble.
+- **Ring captions:** only the ring numbers the orb doesn't already show (Runs today, Last run), at 9 and 3 o'clock; Success lives only in the orb; 28px mono values in `--ring-1..3` with 12px uppercase labels. On phones (stage < 560px) they move to a readout under the stage.
+- **Outcome buttons:** under the stage, one keyboard button per tab (state glyph, title, state line, its headline number); 4 across from 1180px, 2 across from 560px, stacked on phones. Where four share a row the number sits under the name at 28px. They replace the kit's service cards on Overview; below them the kit's number tiles fill their row, and from 1100px the Activity chart (filling its card) sits beside Recent runs and Reports.
+- **Sizing:** the stage's size comes from CSS (`aspect-ratio` 20/19 on phones, 12/5 from 640px, height 380–460px) and the canvas is absolutely positioned inside it, so the canvas never widens the page.
+- **Motion:** `prefers-reduced-motion` gives a static frame (no drift, rotation, sweep, breathing or moving dots); the animation also pauses off-screen and in hidden tabs.
+- **Dark mode:** glow stronger, grid fainter.
+- **Text equivalent:** a live-region sentence names the headline, success rate, ring numbers and every tab's state.
 
 ## The orb
 Colours derive from the accent blue: ok #1b5fc1 (dark #6aa8ff), running teal-cyan (0 130 170 / 140 220 245), waiting amber (214 140 10 / 242 184 75), failing red (200 55 50 / 255 138 128). Ring captions: success green, accent blue, violet (≥4.4:1 on the page).
