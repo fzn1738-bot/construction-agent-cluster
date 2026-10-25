@@ -1,60 +1,88 @@
-# Design — Construction Agent Dashboard
+# Design — Construction Agent Dashboard ("site sky")
+
+## Owner direction
+- Follow the owner's two reference screenshots (`.ai-design-refs/REF-cda12f6f01a0.png`, `REF-143f1afe8b7b.png`): a tall, phone-width (780px) screen, pale sky-blue page (#d0e0eb to #e5f3fc), white rounded cards, soft shadows, airy spacing. I could not view the images; the palette and layout were taken from sampled pixel colours and proportions, so the match is by colour and composition rather than by inspecting details. Match their overall aesthetic, layout and component style.
+- Owner's notes, followed exactly: "Act as a world-class UI designer. Every tab gets its own layout, not shared tiles. Full width, mobile friendly."
+- Consequences: the old warm-concrete/teal look is replaced by cool blue-white with a blue accent; each pane has its own composition (see Panes); content runs full width of the viewport (no fixed max-width container), cards stack on phones and expand to multi-column from 720px.
 
 ## Audience and job
-Developers and system administrators who run the construction agent runtime (loop, folder polling, FTP sync, IMAP polling, SQLite state). They glance at it on a desktop monitor or a Mac mini console, often on a second screen, sometimes on a phone to check after hours. The dashboard's one job: answer "is the agent alive and keeping up?" in a second, then show which monitor (folders, FTP, email) needs attention. The orb carries that answer; everything else is supporting detail.
+Site managers, project coordinators and the client's operations lead who rely on the construction agent to file site documents (watched folders), mirror files over FTP, triage the project inbox (IMAP) and keep a SQLite record of every action. They check on a phone in the site cabin or a desktop in the office. Job: answer "is the agent delivering what we pay for, and is anything waiting on me?" in a second, then let them run an action or add a missing key. Each tab is a client outcome, never an internal component.
 
 ## Mood and references
-Calm, sober, site-office: warm concrete neutrals, one survey-teal accent, and signal colours that behave like safety signage (green go, amber caution, red stop). Dense but quiet, built for long unattended watching, not marketing.
-- Sync/status tooling conventions: [Ventoy](https://github.com/ventoy/Ventoy) (utilitarian, status-first) and [aedes-persistence](https://www.npmjs.com/package/aedes-persistence) (infrastructure library; plain, technical). Borrowed: restraint, monospace for technical values. Avoided: their brand colours and any hi-vis yellow/black hazard-tape cliché.
+Bright, calm, trustworthy: daylight over a site, white sheets on a pale blue drawing table. Confident type, one blue accent, signal colours only for state.
+- Owner's references (above).
+- [Linear](https://linear.app) for restraint and dense lists; [Stripe Dashboard](https://dashboard.stripe.com) for numeric hierarchy; [Vercel](https://vercel.com/dashboard) for status chips. Borrow: whitespace, tabular numerals, one accent. Avoid: gradient hero banners, hazard-stripe/hard-hat construction clichés, identical KPI tile rows on every tab.
 
 ## Palette — light
 | Role | Hex | Contrast |
 |---|---|---|
-| page (`--paper`) | #ebe8e1 | — |
-| surface | #fbfaf7 | — |
-| surface-2 | #f3f1ec | — |
-| ink | #1d2226 | 15.4 on surface |
-| muted ink (`--ink-2`) | #4a5258 | 7.6 |
-| faint ink (`--ink-3`) | #5b646b | 5.8 (4.9 on page, 5.4 on surface-2) |
-| rule | #d6d2c8 | decorative |
-| accent | #0a6b78 | 5.9; white on accent 6.2 |
-| success | #17703a | 5.0 on page; 5.1 on ok-soft |
-| warning | #8a5200 | 6.1; 5.4 on warn-soft |
-| danger | #b32a2a | 6.1; 5.1 on bad-soft |
-| series 1–4 | #0072b2, #c24e00, #7a5a00, #7b4fa8 | ≥4.6 on surface |
+| page `--paper` | #e4edf4 | — |
+| surface | #ffffff | — |
+| surface-2 | #f1f6fa | — |
+| ink | #14212e | 16.3 on surface, 13.8 on page |
+| strong | #0b1620 | headings |
+| muted ink `--ink-2` | #44566a | 7.5 |
+| faint ink `--ink-3` | #566879 | 5.8 (4.9 on page) |
+| rule | #cfdce7 | decorative |
+| accent | #1b5fc1 | 6.1 on surface; white on accent 6.1 |
+| accent-soft | #dbe8f8 | accent on it 4.9 |
+| success | #12703d | 6.2; 5.2 on ok-soft #dcf1e4 |
+| warning | #8a5200 | 6.4; 5.5 on warn-soft #fbeccd |
+| danger | #b32a2a | 6.4; 5.2 on bad-soft #fbe1de |
+| series 1–4 | #0072b2, #b84800, #7a5a00, #7b4fa8 | marks ≥3:1 on surface, labelled directly |
 
 ## Palette — dark
 | Role | Hex | Contrast |
 |---|---|---|
-| page | #12161a | — |
-| surface | #1a2025 | — |
-| surface-2 | #222a30 | — |
-| ink | #eef1f3 | 14.5 |
-| muted ink | #b4bdc4 | 8.6 |
-| faint ink | #8d98a1 | 5.6 (5.0 on surface-2) |
-| rule | #2d363d | decorative |
-| accent | #4cc2d1 | 7.8; dark ink on accent 8.6 |
-| success | #5fd48a | 8.8 |
-| warning | #f2b84b | 9.2 |
-| danger | #ff8a80 | 7.2 |
-| series 1–4 | #56b4e9, #ff9a52, #e6c84a, #b79af0 | ≥6.9 |
+| page | #0d1620 | — |
+| surface | #142130 | — |
+| surface-2 | #1b2b3d | — |
+| ink | #eaf1f8 | 14.3 on surface |
+| muted ink | #b3c2d1 | 9.0 |
+| faint ink | #8fa2b5 | 6.2 (5.5 on surface-2) |
+| rule | #263a50 | decorative |
+| accent | #6aa8ff | 6.7; dark ink on accent 7.9 |
+| success | #5fd48a | 8.7 |
+| warning | #f2b84b | 9.1 |
+| danger | #ff8a80 | 7.1 |
+| series 1–4 | #56b4e9, #ff9a52, #e6c84a, #b79af0 | ≥6.1 |
 
-Chart series follow the Okabe–Ito colour-blind-safe family (blue / vermillion / olive-gold / violet), differing in hue and lightness; pair with direct labels or markers, never colour alone. Status is always colour plus text/icon.
+Series follow the Okabe–Ito colour-blind-safe family (blue / vermillion / olive-gold / violet); always add direct labels, markers or dash patterns. State is colour plus word or icon.
 
 ## Typography
-System stacks only (strict CSP, nothing to download): `ui-sans-serif / SF Pro / Segoe UI` for UI, `ui-monospace / SF Mono / Menlo` for paths, hostnames, counts, timestamps and IDs. Scale: 12 / 14 / 16 / 20 / 28 / orb headline 40+. Body 14–16px, labels 12px uppercase-free with tabular numerals for counts.
+System stacks only (strict CSP): `ui-sans-serif, SF Pro Text, Segoe UI` for UI; `ui-monospace, SF Mono, Menlo` for paths, hosts, IDs, timestamps. Scale 12 / 14 / 16 / 20 / 28 / 44 (the one primary number per screen). Headings weight 650, tight tracking (-0.01em); numerals tabular. Minimum 12px; no faint ink under 12px.
 
 ## Layout and components
-- Spacing on a 4px base (4, 8, 12, 16, 24, 32). Radius 8px cards, 6px controls, full pill for status chips. Shadow: soft 1px+14px in light, none in dark (rules separate instead).
-- Orb centred at the top, three ring captions (Polling Folders, FTP Transfers, Emails Processed) around it, then a monitors list/table with one row per source: name, state chip, last run, queue depth.
-- Rows are compact; paths and error text in mono, truncated with a title tooltip.
-- Responsive: single column on phones, orb first.
+- 4px base spacing (4, 8, 12, 16, 24, 32, 48). Radius 16px cards (as in the references), 10px controls, pill chips. Shadow `0 8px 24px` blue-tinted in light, none in dark (rules separate).
+- Full width: page padding 16px on phones, 32px desktop; cards fill the width and form a 12-column grid from 720px.
+- Cards are white on the pale page; header row = title (16/650) + chip; no card-in-card.
+- Tables become stacked label/value cards under 640px. Tap targets ≥44px. Primary run button: solid accent, one per screen.
+- Status chips: ok / warn / bad / demo (accent-soft with "Demo data" text).
 
 ## Do / Don't
-- Do reserve green/amber/red for state; use the teal accent for interaction and selection.
-- Do show "last synced" times prominently; staleness is the real failure mode.
-- Don't use hazard stripes, hard hats or stock construction imagery.
-- Don't rely on colour alone, and don't put ink-3 text below 12px.
+- Do give each tab its own composition; do mark demo data with a visible "Demo data" chip until a key is saved.
+- Do show "last updated" next to every number.
+- Don't use identical tile rows on different tabs; don't use green/amber/red decoratively; don't use placeholder text.
+
+## Panes
+Each pane has one primary view and 1-3 metrics at most. Sketches are mobile order; desktop notes follow `→`. Empty states always say what to do next. Clients see all panes (client: true) except that keys are shown masked.
+
+1. **Re-plan… → "Client outcomes"** (split). Left: outcome table (Outcome, Fed by, Tab, Status). Right rail: two metrics (Outcomes delivered, Running on live data) over a "Coverage by outcome" bar. → list left 8 cols, rail 4. Empty: "No outcomes yet — run the scan to discover what the agent delivers." Client sees what they get and which part waits on a key.
+2. **Give each tab a real screen → "Screens"** (grid). A 2-up card grid, one card per screen with a mini wireframe thumbnail of its layout, data chip, and actions. Metrics strip: Screens ready, Screens without data. Empty: "Every screen shows demo data until connected."
+3. **Working actions → "Action history"** (focus). Top: large run buttons row (Scan folders, Sync FTP, Check inbox) with Runs today as the 44px number; below, full-width duration line, then history table with result text. Empty: "No runs yet. Press Scan folders."
+4. **Connections** (grid). Four service cards (folder, FTP, IMAP, SQLite), each with state dot+word, endpoint in mono, latency, "Test" button; below a latency line with direct labels. Empty: "No connections configured — add keys in Settings."
+5. **Keys in Settings** (split). Left: stored keys list, values masked (last 4 only). Right: add/replace form, "Save and test" button; result chip appears inline. Empty: "No keys saved. Demo data is showing."
+6. **Demo data** (focus). Wide stacked bar per screen (live vs demo rows), then source table with "Switches to live when". A banner states how many screens are on demo data. Empty: "Everything is live."
+7. **Overview visual** (focus). The centrepiece below, plus Success rate and Last run beneath; outcome status table underneath.
+
+## Centrepiece (Overview) — "Site plan orb"
+Built as `dashboard/public/hero.js` on a canvas/SVG, keeping the orb as the heart.
+- **Core:** a central orb (radius ≈ 22% of the shorter side) in the mood colour (`--orb-ok` healthy, `--orb-run` running, `--orb-wait` caution, `--orb-bad` failing), radial-gradient glow, breathing scale 1→1.04 over `--breath` (7s). Inside: primary number (Success rate, 44px) and headline word ("Healthy").
+- **Site-plan grid:** faint blueprint grid (`--rule`, 1px, 24px cells) with slow parallax; two concentric thin survey rings at 1.4× and 1.9× radius, dashed, rotating 120s and 180s.
+- **Pane nodes:** seven small rounded-square nodes (one per pane/outcome) on the outer ring, labelled in 12px ink-2; node fill = state colour (`--ok`, `--warn`, `--bad`; demo nodes accent-soft with dashed outline), plus a glyph character (✓ ! ✕ D) so colour is never alone. Each node's line to the core is a thin path carrying moving dots (speed ∝ recent activity); a stalled path is static, so freezing reads as trouble.
+- **Ring captions:** Runs today, Success, Last run placed at 10, 2 and 6 o'clock using `--ring-1..3`, value 20px + label 12px.
+- **Mobile:** nodes flow onto a single ring at 90% width; labels abbreviate; motion respects `prefers-reduced-motion` (static, no rotation).
+- **Dark mode:** glow stronger, grid at 40% opacity.
 
 ## The orb
-The centrepiece, ~breathing slowly (7s) when healthy so a frozen orb reads as a stalled agent. Colour by mood, taken from the accent: ok teal (light 10 125 140 / dark 76 194 209), running deeper blue (20 100 170 / pale 150 225 240), waiting amber (214 140 10 / 242 184 75), failing red (200 55 50 / 255 138 128). Ring captions use success green, accent teal and violet (`--ring-1..3`), each ≥4.4:1 on the page.
+Colours derive from the accent blue: ok #1b5fc1 (dark #6aa8ff), running teal-cyan (0 130 170 / 140 220 245), waiting amber (214 140 10 / 242 184 75), failing red (200 55 50 / 255 138 128). Ring captions: success green, accent blue, violet (≥4.4:1 on the page).

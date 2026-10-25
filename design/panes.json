@@ -1,0 +1,119 @@
+{ "panes": [
+ { "id": "re-plan-this-solution-from-wha",
+   "summary": "See every client outcome the agent delivers and which tab owns it.",
+   "layout": "split",
+   "recordsTitle": "Client outcomes",
+   "columns": ["Outcome","Fed by","Tab","Status","Last delivered"],
+   "sample": [
+    ["Site drawings filed on arrival","Folder watcher","Documents","Live","2 min ago"],
+    ["Contractor files mirrored offsite","FTP sync","Transfers","Live","11 min ago"],
+    ["RFIs and invoices triaged from inbox","IMAP polling","Inbox","Demo data","Waiting for key"],
+    ["Every action traceable","SQLite state","Activity log","Live","Just now"]],
+   "metrics": [
+    {"key":"outcomes","label":"Outcomes delivered","unit":"","good":"up","sample":"4"},
+    {"key":"live","label":"Running on live data","unit":"%","good":"up","sample":"75"}],
+   "panels": [
+    {"title":"Coverage by outcome","kind":"bar","fields":["Items handled today"],"labels":["Documents","Transfers","Inbox","Activity"]},
+    {"title":"Needs a key","kind":"list","fields":["Outcome","Missing"],"sample":[["Inbox triage","IMAP password"]]}],
+   "actions": ["run"] },
+ { "id": "give-each-tab-a-real-screen",
+   "summary": "Open any client tab and check its screen has data, a main view and buttons.",
+   "layout": "grid",
+   "recordsTitle": "Screens",
+   "columns": ["Screen","Layout","Main view","Actions","Data"],
+   "sample": [
+    ["Documents","Split","Arrivals table + folder summary","Scan now","Live"],
+    ["Transfers","Focus","Throughput line","Sync now","Live"],
+    ["Inbox","Split","Message queue + sender summary","Check mail","Demo"],
+    ["Activity log","Grid","Run history","Export","Live"],
+    ["Settings","Focus","Key vault","Test connection","Live"]],
+   "metrics": [
+    {"key":"screens","label":"Screens ready","unit":"","good":"up","sample":"5 of 5"},
+    {"key":"empty","label":"Screens without data","unit":"","good":"down","sample":"0"}],
+   "panels": [
+    {"title":"Screen readiness","kind":"table","fields":["Screen","Layout","Main view","Actions","Data"],"sample":[["Documents","Split","Arrivals table","Scan now","Live"],["Inbox","Split","Message queue","Check mail","Demo"]]}],
+   "actions": [] },
+ { "id": "working-actions",
+   "summary": "Press a run button and watch the result land in the history.",
+   "layout": "focus",
+   "recordsTitle": "Action history",
+   "columns": ["Action","Started by","Started","Duration","Result"],
+   "sample": [
+    ["Scan site folders","Fayez N.","09:42","3.1 s","42 files filed"],
+    ["Sync to FTP","Schedule","09:30","18.4 s","7 uploaded, 0 failed"],
+    ["Check inbox","Schedule","09:15","2.2 s","3 RFIs, 1 invoice"],
+    ["Sync to FTP","Fayez N.","08:58","31.0 s","1 failed: timeout"]],
+   "metrics": [
+    {"key":"runs","label":"Runs today","unit":"","good":"up","sample":"24"},
+    {"key":"failed","label":"Failed","unit":"","good":"down","sample":"1"},
+    {"key":"avg","label":"Avg duration","unit":"s","good":"down","sample":"11.2"}],
+   "panels": [
+    {"title":"Run durations, today","kind":"line","fields":["Seconds"],"labels":["06:00","08:00","10:00","12:00","14:00"]},
+    {"title":"Action history","kind":"table","fields":["Action","Started by","Started","Duration","Result"],"sample":[["Scan site folders","Fayez N.","09:42","3.1 s","42 files filed"]]}],
+   "actions": ["run"] },
+ { "id": "connections-for-every-outside-",
+   "summary": "Check each outside service is reachable and test it.",
+   "layout": "grid",
+   "recordsTitle": "Connections",
+   "columns": ["Service","Endpoint","State","Latency","Last checked"],
+   "sample": [
+    ["Site folders","/Volumes/Projects/Incoming","Connected","4 ms","1 min ago"],
+    ["FTP server","ftp.harlowbuild.example:21","Connected","212 ms","3 min ago"],
+    ["Mailbox (IMAP)","imap.harlowbuild.example:993","Key missing","—","Never"],
+    ["Local database","state.sqlite","Connected","1 ms","Just now"]],
+   "metrics": [
+    {"key":"up","label":"Connected","unit":"","good":"up","sample":"3 of 4"},
+    {"key":"latency","label":"Slowest","unit":"ms","good":"down","sample":"212"}],
+   "panels": [
+    {"title":"Latency, last hour","kind":"line","fields":["FTP","IMAP"],"labels":["-60m","-45m","-30m","-15m","now"]},
+    {"title":"Connection cards","kind":"list","fields":["Service","State"],"sample":[["FTP server","Connected"],["Mailbox (IMAP)","Key missing"]]}],
+   "actions": ["run"] },
+ { "id": "keys-entered-in-settings",
+   "summary": "Paste a key, save it, and see the connection switch from demo to live.",
+   "layout": "split",
+   "recordsTitle": "Stored keys",
+   "columns": ["Key","Used by","Value","Updated","Status"],
+   "sample": [
+    ["FTP password","FTP server","••••••••9f2a","12 Oct","Valid"],
+    ["IMAP password","Mailbox","Not set","—","Missing"],
+    ["IMAP user","Mailbox","site@harlowbuild.example","—","Set"],
+    ["Watch folder path","Site folders","/Volumes/Projects/Incoming","3 Sep","Valid"]],
+   "metrics": [
+    {"key":"set","label":"Keys set","unit":"","good":"up","sample":"3 of 4"}],
+   "panels": [
+    {"title":"Add or replace a key","kind":"list","fields":["Key","Value","Save and test"],"sample":[["IMAP password","paste here","Save and test"]]}],
+   "actions": [] },
+ { "id": "demo-data-until-keys-are-set",
+   "summary": "Know which numbers are real and which are demo samples.",
+   "layout": "focus",
+   "recordsTitle": "Data source by screen",
+   "columns": ["Screen","Source","Rows shown","Switches to live when"],
+   "sample": [
+    ["Documents","Live","1,284","—"],
+    ["Transfers","Live","312","—"],
+    ["Inbox","Demo sample","24","IMAP password saved"],
+    ["Activity log","Live","5,090","—"]],
+   "metrics": [
+    {"key":"demo","label":"Screens on demo data","unit":"","good":"down","sample":"1"},
+    {"key":"live","label":"Live rows","unit":"%","good":"up","sample":"98"}],
+   "panels": [
+    {"title":"Live vs demo rows by screen","kind":"bar","fields":["Live","Demo"],"labels":["Documents","Transfers","Inbox","Activity log"]},
+    {"title":"Data source by screen","kind":"table","fields":["Screen","Source","Rows shown","Switches to live when"],"sample":[["Inbox","Demo sample","24","IMAP password saved"]]}],
+   "actions": [] },
+ { "id": "a-futuristic-overview-visual-s",
+   "summary": "Read the whole agent's health from one glance at the site map.",
+   "layout": "focus",
+   "recordsTitle": "Outcome status",
+   "columns": ["Outcome","State","Primary number","Updated"],
+   "sample": [
+    ["Documents","Healthy","42 filed today","2 min ago"],
+    ["Transfers","Caution","1 failed upload","11 min ago"],
+    ["Inbox","Demo","24 sample messages","—"],
+    ["Activity log","Healthy","24 runs","Just now"]],
+   "metrics": [
+    {"key":"success","label":"Success rate","unit":"%","good":"up","sample":"98"},
+    {"key":"last","label":"Last run","unit":"min","good":"down","sample":"2"}],
+   "panels": [
+    {"title":"Runs, last 24 hours","kind":"line","fields":["Runs"],"labels":["00","06","12","18","now"]}],
+   "actions": ["run"] }
+]}

@@ -93,6 +93,11 @@ h3 { font-size: 15px; margin: 0 0 10px; color: var(--strong); display: flex; ali
 
 /* panels */
 .panels { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 420px), 1fr)); gap: 12px; }
+/* pane layouts the design picks: focus = the first panel leads full width; split = a main column and a side column */
+.panels[data-layout="focus"] > :first-child { grid-column: 1 / -1; }
+.panels[data-layout="split"] { grid-template-columns: minmax(0, 2fr) minmax(0, 1fr); }
+.panels[data-layout="split"] > :first-child { grid-row: span 2; }
+@media (max-width: 760px) { .panels[data-layout="split"] { grid-template-columns: 1fr; } .panels[data-layout="split"] > :first-child { grid-row: auto; } }
 .chart { width: 100%; height: 180px; display: block; overflow: visible; }
 .chart .grid { stroke: var(--rule); stroke-width: 1; }
 .chart .axis { fill: var(--ink-3); font: 11px var(--sans); }
@@ -148,16 +153,17 @@ td.num, th.num { text-align: right; font-family: var(--mono); }
 .linkbtn { background: none; border: 0; padding: 6px 4px; font: 600 13px var(--sans); color: var(--accent); cursor: pointer; min-height: 32px; }
 .linkbtn.danger { color: var(--bad); }
 .main { min-width: 0; display: grid; align-content: start; }
-.top { display: flex; align-items: center; gap: 12px; padding: 16px 24px 8px; max-width: 1180px; width: 100%; }
+.top { display: flex; align-items: center; gap: 12px; padding: 16px clamp(16px, 2.4vw, 40px) 8px; width: 100%; }
 .top .ttl { flex: 1; min-width: 0; }
 .top .ttl p { margin: 2px 0 0; color: var(--ink-2); font-size: 13.5px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .iconbtn.menu { display: none; }
 .iconbtn.menu svg { fill: none; }
-main#view { max-width: 1180px; width: 100%; padding: 8px 24px 48px; display: grid; gap: 22px; }
+/* the content uses the whole width beside the sidebar */
+main#view { width: 100%; padding: 8px clamp(16px, 2.4vw, 40px) 48px; display: grid; gap: 22px; }
 .view { display: grid; gap: 18px; align-content: start; }
 .view[hidden] { display: none; }
 .scrim { position: fixed; inset: 0; background: rgb(3 10 20 / 0.42); z-index: 19; }
-.notice { margin: 0 24px; padding: 10px 14px; border-radius: 12px; font-size: 14px; background: var(--accent-soft); color: var(--ink); border: 1px solid var(--rule); max-width: 1132px; }
+.notice { margin: 0 clamp(16px, 2.4vw, 40px); padding: 10px 14px; border-radius: 12px; font-size: 14px; background: var(--accent-soft); color: var(--ink); border: 1px solid var(--rule); }
 .notice.warn { background: var(--warn-soft); border-color: var(--warn); }
 .actions.start { justify-content: flex-start; }
 .sec-h { margin: 6px 0 0; }
@@ -221,3 +227,18 @@ input[role="switch"]:checked::after { transform: translateX(18px); }
   .notice { margin: 0 16px; }
 }
 @media (prefers-reduced-motion: reduce) { .side, input[role="switch"], input[role="switch"]::after { transition: none; } }
+
+/* the solution's own screens: Overview centrepiece (hero.js) and pane screens (panes/<id>.js) */
+.hero { width: 100%; position: relative; }
+.hint a, .setup-card a:not(.btn) { color: var(--accent); }
+.hero[hidden], .orb[hidden], .pane-custom[hidden], .setup[hidden] { display: none; }
+.pane-custom { display: grid; gap: 16px; min-width: 0; }
+.setup-card { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 14px; padding: 12px 16px; border-radius: 14px; border: 1px solid var(--warn); background: var(--warn-soft); font-size: 14px; }
+.setup-card.demo { border-color: var(--accent); background: var(--accent-soft); }
+.setup-card span { flex: 1 1 280px; color: var(--ink-2); }
+.setup-card .btn { min-height: 38px; padding: 7px 14px; text-decoration: none; }
+.chip.state.ok { background: var(--ok-soft); color: var(--ok); } .chip.state.warn { background: var(--warn-soft); color: var(--warn); } .chip.state.bad { background: var(--bad-soft); color: var(--bad); } .chip.state.idle { background: var(--surface-2); color: var(--ink-3); }
+.form.conn { padding: 14px 0; border-bottom: 1px solid var(--rule); }
+.form.conn:last-child { border-bottom: 0; }
+.conn-head { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; } .conn-head b { color: var(--strong); font-size: 15px; }
+@media (min-width: 1500px) { .tiles { grid-template-columns: repeat(auto-fill, minmax(190px, 1fr)); } }
