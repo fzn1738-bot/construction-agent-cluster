@@ -1,5 +1,5 @@
 {
-  "name": "Re-plan this solution from what it reall",
+  "name": "Construction Agent",
   "port": 4102,
   "start": "node dashboard/server.mjs",
   "health": "/healthz"

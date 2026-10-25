@@ -1,5 +1,5 @@
 // Site documents: a file list of everything filed from the watched site folder, with a rail for the folder itself.
-import { screen, chip, demoChip, needsSetup, bigNumber, message, actionButton, chips, line, bytes, ext, TONE } from './common.js';
+import { screen, chip, demoChip, demoBanner, bigNumber, message, actionButton, chips, line, bytes, ext, TONE } from './common.js';
 
 const FILTERS = [['all', 'All'], ['Filed', 'Filed'], ['Updated', 'Updated'], ['Failed', 'Failed']];
 
@@ -20,7 +20,7 @@ const pane = screen((api) => {
   const count = (k) => (k === 'all' ? rows.length : rows.filter((a) => a.event === k).length);
 
   const list = !rows.length
-    ? h('div', { class: 'cg-empty-in' }, h('p', { text: d.configured ? 'Nothing has arrived yet. New drawings and documents appear here the moment they land in the folder.' : (d.needs || 'No folder is watched yet') }), d.configured ? actionButton(api, 'Scan site folders', 'scan', null, { primary: true, busy: 'Scanning…' }) : null)
+    ? h('div', { class: 'cg-empty-in' }, h('p', { text: 'Nothing has arrived yet. New drawings and documents appear here the moment they land in the folder.' }), actionButton(api, 'Scan site folders', 'scan', null, { busy: 'Scanning…' }))
     : h('ul', { class: 'cg-files' }, shown.map((a) => h('li', { class: 'cg-file ' + (a.status === 'failed' ? 'is-bad' : '') },
       h('span', { class: 'cg-ext', 'aria-hidden': 'true', text: ext(a.file) }),
       h('div', { class: 'cg-file-main' },
@@ -46,8 +46,7 @@ const pane = screen((api) => {
       folderForm(api)),
     h('section', { class: 'cg-card' }, h('h3', { text: 'Arrivals, last 24 hours' }), line(ctx, 'Arrivals, last 24 hours', 'Files', d.hours)));
 
-  if (!d.configured) return h('div', { class: 'cg-pane' }, needsSetup(ctx, d, 'No site folder watched yet'), folderForm(api) ? h('section', { class: 'cg-card' }, folderForm(api)) : null);
-  return h('div', { class: 'cg-pane cg-split' }, main, rail);
+  return h('div', { class: 'cg-pane' }, demoBanner(ctx, d), h('div', { class: 'cg-pane cg-split' }, main, rail));
 });
 
 export function render(root, ctx) { return pane.render(root, ctx); }

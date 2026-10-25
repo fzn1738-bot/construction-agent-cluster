@@ -1,12 +1,18 @@
-// Overview centrepiece: the "site plan orb". A glowing core (headline state and sync rate) inside a blueprint grid,
-// with one node per client outcome (Site documents, Contractor file transfers, Project inbox, Activity record)
-// on a survey ring. Each node carries its live state; the line to the core carries moving dots when work flows
-// and goes still when it stalls. Every node is also a real button below the canvas, so the state is readable
-// without sight and without motion. Respects prefers-reduced-motion (one still frame, redrawn on change).
+// Overview centrepiece: the "site plan orb". A glowing core (headline state and success rate) inside a blueprint
+// grid, with one node per client outcome (Site documents, Contractor file transfers, Project inbox, Activity record)
+// on the outer ring and a small bead per cross-outcome tab (Client outcomes, Action history, Site map, Screens,
+// Demo data, Outside services, Connection health, Keys) on the inner survey ring. Each node carries its live state
+// (✓ ! ✕, D for demo data); the line from an outcome to the core carries moving dots when work flows and goes
+// still when it stalls. Every node is also a real button below the canvas, so the state is readable without sight
+// and without motion. Respects prefers-reduced-motion (one still frame, redrawn on change). Also used by the Site
+// map tab (panes/a-futuristic-overview-visual-s.js) with that tab's own data.
 
 const GLYPH = { ok: '✓', warn: '!', bad: '✕', idle: '–' };
 const STATE_WORD = { ok: 'Healthy', warn: 'Needs a look', bad: 'Failing', idle: 'Waiting for setup' };
 const SHORT = { documents: 'Documents', transfers: 'Transfers', inbox: 'Inbox', 'activity-log': 'Record' };
+export const OUTCOME_IDS = Object.keys(SHORT);
+const isOutcome = (p) => OUTCOME_IDS.includes(p.id);
+const isDemo = (ctx, p) => !!(ctx.demo || (p.state && p.state.demo));
 
 const live = new WeakMap();
 const reduce = () => window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
@@ -17,7 +23,7 @@ function palette() {
   return {
     ok: css('--ok') || '#12703d', warn: css('--warn') || '#8a5200', bad: css('--bad') || '#b32a2a', idle: css('--ink-3') || '#566879',
     accent: css('--accent') || '#1b5fc1', soft: css('--accent-soft') || '#dbe8f8', surface: css('--surface') || '#fff', ink: css('--ink') || '#14212e', ink2: css('--ink-2') || '#44566a', rule: css('--rule') || '#cfdce7', strong: css('--strong') || '#0b1620',
-    ring: [css('--ring-1') || '#12703d', css('--ring-2') || '#1b5fc1', css('--ring-3') || '#6b4aa8'],
+    ring: [css('--ring-1') || '#12703d', css('--ring-2') || '#1b5fc1', css('--ring-3') || '#7b4fa8'],
     mood: { ok: triple('--orb-ok', '27 95 193'), run: triple('--orb-run', '0 130 170'), wait: triple('--orb-wait', '214 140 10'), bad: triple('--orb-bad', '200 55 50') },
     dark: document.documentElement.dataset.theme === 'dark'
   };
@@ -27,27 +33,37 @@ const stateOf = (p) => (p.state && p.state.state) || 'idle';
 const fmtVal = (v) => (typeof v === 'number' ? (Math.abs(v) >= 1000 ? Math.round(v / 100) / 10 + 'k' : String(Math.round(v * 10) / 10)) : String(v ?? '–'));
 
 /** The one-line text equivalent of everything the canvas shows. */
+const rateOf = (ctx) => (ctx.metrics || []).find((m) => m.key === 'success') || (ctx.metrics || []).find((m) => m.key === 'syncRate');
 export function describe(ctx) {
   const st = ctx.status || {};
-  const rate = (ctx.metrics || []).find((m) => m.key === 'syncRate');
-  const parts = [(st.headline || 'Ready') + (ctx.demo ? ' (demo data)' : '') + '.', rate ? 'Sync rate ' + rate.value + '%.' : ''];
-  for (const p of ctx.panes || []) parts.push(p.title + ': ' + (STATE_WORD[stateOf(p)] || 'Waiting') + (p.state && p.state.text ? ', ' + p.state.text : '') + '.');
+  const rate = rateOf(ctx);
+  const parts = [(st.headline || 'Ready') + (ctx.demo ? ' (demo data)' : '') + '.', rate && rate.value !== '–' ? 'Success rate ' + rate.value + '%.' : ''];
+  const ring = (st.ring || []).map((r) => r.label + ' ' + r.value).join(', ');
+  if (ring) parts.push(ring + '.');
+  const panes = [...(ctx.panes || []).filter(isOutcome), ...(ctx.panes || []).filter((p) => !isOutcome(p))];
+  for (const p of panes) parts.push(p.title + ': ' + (STATE_WORD[stateOf(p)] || 'Waiting') + (isDemo(ctx, p) && !ctx.demo ? ' (demo data)' : '') + (p.state && p.state.text ? ', ' + p.state.text : '') + '.');
   return parts.filter(Boolean).join(' ');
 }
 
-function layout(w, h, n) {
+function layout(w, h, n, m) {
   const small = w < 560;
   const cx = w / 2, cy = h / 2;
   const R = Math.min(w, h) * (small ? 0.19 : 0.2);
   const ringR = small ? Math.min(w * 0.4, h * 0.38) : Math.min(h * 0.42, w * 0.34);
   const nodes = Array.from({ length: n }, (_, i) => { const a = -Math.PI / 2 + (i * 2 * Math.PI) / Math.max(n, 1) + Math.PI / Math.max(n, 1); return { x: cx + Math.cos(a) * ringR, y: cy + Math.sin(a) * ringR, a }; });
-  return { cx, cy, R, ringR, nodes, node: small ? 20 : 24, small };
+  // beads for the cross-outcome tabs on the inner survey ring, nudged off the outcome links
+  const beadR = Math.min(R * 1.45, ringR * 0.72);
+  const near = (a) => nodes.some((nd) => Math.abs(Math.atan2(Math.sin(a - nd.a), Math.cos(a - nd.a))) < 0.21);
+  const beads = Array.from({ length: m }, (_, i) => { let a = -Math.PI / 2 + ((i + 0.5) * 2 * Math.PI) / Math.max(m, 1); if (near(a)) a += 0.26; return { x: cx + Math.cos(a) * beadR, y: cy + Math.sin(a) * beadR, a }; });
+  return { cx, cy, R, ringR, nodes, beads, beadR, node: small ? 20 : 24, bead: small ? 9 : 10, small };
 }
+function roundSquare(c, half, r) { c.beginPath(); c.moveTo(-half + r, -half); c.arcTo(half, -half, half, half, r); c.arcTo(half, half, -half, half, r); c.arcTo(-half, half, -half, -half, r); c.arcTo(-half, -half, half, -half, r); c.closePath(); }
 
 function draw(g, state, t) {
   const { ctx: c, w, h, ctxData: d, pal } = state;
-  const panes = d.panes || [];
-  const L = layout(w, h, panes.length);
+  const panes = (d.panes || []).filter(isOutcome);
+  const tools = (d.panes || []).filter((p) => !isOutcome(p));
+  const L = layout(w, h, panes.length, tools.length);
   state.L = L;
   c.clearRect(0, 0, w, h);
   const moving = !state.still;
@@ -91,8 +107,8 @@ function draw(g, state, t) {
   body.addColorStop(0, pal.dark ? 'rgb(' + rgb + ' / 0.35)' : '#ffffff'); body.addColorStop(1, 'rgb(' + rgb + ' / ' + (pal.dark ? 0.12 : 0.22) + ')');
   c.fillStyle = body; c.beginPath(); c.arc(L.cx, L.cy, R, 0, Math.PI * 2); c.fill();
   c.strokeStyle = 'rgb(' + rgb + ' / 0.7)'; c.lineWidth = 2; c.stroke();
-  const rate = (d.metrics || []).find((m) => m.key === 'syncRate');
-  const big = rate ? fmtVal(rate.value) + (rate.unit || '') : d.status && d.status.primary ? fmtVal(d.status.primary.value) : '–';
+  const rate = rateOf(d);
+  const big = rate ? fmtVal(rate.value) + (rate.value === '–' ? '' : rate.unit || '') : d.status && d.status.primary ? fmtVal(d.status.primary.value) : '–';
   c.textAlign = 'center'; c.textBaseline = 'middle'; c.fillStyle = pal.strong;
   c.font = '700 ' + Math.round(Math.min(44, R * 0.56)) + 'px ui-sans-serif, -apple-system, "Segoe UI", sans-serif'; c.fillText(big, L.cx, L.cy - R * 0.1);
   c.fillStyle = 'rgb(' + rgb + ')'; c.font = '650 ' + Math.round(Math.max(13, R * 0.2)) + 'px ui-sans-serif, -apple-system, "Segoe UI", sans-serif';
@@ -103,17 +119,27 @@ function draw(g, state, t) {
     const n = L.nodes[i]; const s = stateOf(p); const half = L.node;
     const col = s === 'idle' ? pal.idle : pal[s];
     c.save(); c.translate(n.x, n.y);
-    const r = 10;
-    c.beginPath(); c.moveTo(-half + r, -half); c.arcTo(half, -half, half, half, r); c.arcTo(half, half, -half, half, r); c.arcTo(-half, half, -half, -half, r); c.arcTo(-half, -half, half, -half, r); c.closePath();
-    if (d.demo) { c.fillStyle = pal.soft; c.fill(); c.setLineDash([4, 3]); c.strokeStyle = col; c.lineWidth = 2; c.stroke(); }
+    roundSquare(c, half, 10);
+    const dm = isDemo(d, p);
+    if (dm) { c.fillStyle = pal.soft; c.fill(); c.setLineDash([4, 3]); c.strokeStyle = pal.accent; c.lineWidth = 2; c.stroke(); }
     else { c.fillStyle = s === 'idle' ? pal.surface : col; c.fill(); c.strokeStyle = col; c.lineWidth = 2; c.stroke(); }
     c.setLineDash([]); c.textAlign = 'center'; c.textBaseline = 'middle';
-    c.fillStyle = d.demo || s === 'idle' ? col : pal.surface; c.font = '700 ' + (L.small ? 16 : 20) + 'px ui-sans-serif, sans-serif';
-    c.fillText(d.demo ? 'D' : GLYPH[s], 0, 1);
+    c.fillStyle = dm ? pal.accent : s === 'idle' ? col : pal.surface; c.font = '700 ' + (L.small ? 16 : 20) + 'px ui-sans-serif, sans-serif';
+    c.fillText(dm ? 'D' : GLYPH[s], 0, 1);
     c.restore();
     c.fillStyle = pal.ink2; c.font = '12px ui-sans-serif, -apple-system, "Segoe UI", sans-serif'; c.textAlign = 'center';
     const below = n.y > L.cy ? 1 : -1;
     c.fillText(L.small ? (SHORT[p.id] || p.title).slice(0, 10) : p.title.length > 22 ? (SHORT[p.id] || p.title) : p.title, Math.max(44, Math.min(w - 44, n.x)), n.y + below * (half + 14));
+  });
+  // beads: one per cross-outcome tab, state colour plus glyph (D for demo data)
+  tools.forEach((p, i) => {
+    const b = L.beads[i]; const s = stateOf(p); const col = s === 'idle' ? pal.idle : pal[s]; const dm = isDemo(d, p);
+    c.save(); c.translate(b.x, b.y); roundSquare(c, L.bead, 5);
+    if (dm) { c.fillStyle = pal.soft; c.fill(); c.setLineDash([3, 2]); c.strokeStyle = pal.accent; }
+    else { c.fillStyle = s === 'idle' ? pal.surface : col; c.fill(); c.strokeStyle = col; }
+    c.lineWidth = 1.5; c.stroke(); c.setLineDash([]);
+    c.fillStyle = dm ? pal.accent : s === 'idle' ? col : pal.surface; c.font = '700 12px ui-sans-serif, sans-serif'; c.textAlign = 'center'; c.textBaseline = 'middle';
+    c.fillText(dm ? 'D' : GLYPH[s], 0, 1); c.restore();
   });
   // ring captions at 10, 2 and 6 o'clock
   const ring = ((d.status && d.status.ring) || []).slice(0, 3);
@@ -140,12 +166,16 @@ function fit(state, canvas, box) {
 
 function legend(ctx) {
   const { h } = ctx;
-  return h('ul', { class: 'cg-hero-legend' }, (ctx.panes || []).map((p) => {
-    const s = stateOf(p);
-    return h('li', {}, h('button', { type: 'button', class: 'cg-node ' + s, onclick: () => ctx.go('pane/' + p.id) },
-      h('i', { 'aria-hidden': 'true', text: ctx.demo ? 'D' : GLYPH[s] }),
-      h('span', {}, h('b', { text: p.title }), h('small', { text: (STATE_WORD[s] || '') + (p.state && p.state.text ? ' · ' + p.state.text : '') }))));
-  }));
+  const item = (p) => {
+    const s = stateOf(p); const dm = isDemo(ctx, p);
+    return h('li', {}, h('button', { type: 'button', class: 'cg-node ' + (dm ? 'demo' : s) + (isOutcome(p) ? '' : ' is-tool'), onclick: () => ctx.go('pane/' + p.id) },
+      h('i', { 'aria-hidden': 'true', text: dm ? 'D' : GLYPH[s] }),
+      h('span', {}, h('b', { text: p.title }), h('small', { text: (dm ? 'Demo data' : STATE_WORD[s] || '') + (p.state && p.state.text ? ' · ' + p.state.text.replace(/^Demo data · /, '') : '') }))));
+  };
+  const outs = (ctx.panes || []).filter(isOutcome), tools = (ctx.panes || []).filter((p) => !isOutcome(p));
+  return h('div', { class: 'cg-hero-keys' },
+    outs.length ? h('ul', { class: 'cg-hero-legend', 'aria-label': 'Client outcomes' }, outs.map(item)) : null,
+    tools.length ? h('ul', { class: 'cg-hero-legend is-tools', 'aria-label': 'Across the outcomes' }, tools.map(item)) : null);
 }
 
 export function render(root, ctx) {
@@ -171,8 +201,11 @@ export function render(root, ctx) {
   canvas.addEventListener('click', (e) => {
     const r = canvas.getBoundingClientRect(); const x = e.clientX - r.left, y = e.clientY - r.top;
     const L = state.L; if (!L) return;
+    const outs = (state.ctxData.panes || []).filter(isOutcome), tools = (state.ctxData.panes || []).filter((p) => !isOutcome(p));
     const i = L.nodes.findIndex((n) => Math.abs(n.x - x) < L.node + 6 && Math.abs(n.y - y) < L.node + 6);
-    if (i >= 0 && state.ctxData.panes[i]) state.ctxData.go('pane/' + state.ctxData.panes[i].id);
+    if (i >= 0 && outs[i]) return state.ctxData.go('pane/' + outs[i].id);
+    const j = L.beads.findIndex((n) => Math.abs(n.x - x) < L.bead + 6 && Math.abs(n.y - y) < L.bead + 6);
+    if (j >= 0 && tools[j]) state.ctxData.go('pane/' + tools[j].id);
   });
   window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').addEventListener('change', (e) => { state.still = e.matches; if (state.still) state.redraw(); else kick(); });
 }

@@ -1,12 +1,11 @@
 // Contractor file transfers: a headline number and sync control on top, then a timeline of every transfer.
-import { screen, chip, demoChip, needsSetup, bigNumber, message, actionButton, chips, line, bytes, TONE } from './common.js';
+import { screen, chip, demoChip, demoBanner, bigNumber, message, actionButton, chips, line, bytes, TONE } from './common.js';
 
 const GLYPH = { download: '↓', upload: '↑' };
 const DIRS = [['download', 'Download'], ['upload', 'Upload'], ['both', 'Both ways']];
 
 const pane = screen((api) => {
   const { ctx, d, ui, h } = api;
-  if (!d.configured) return h('div', { class: 'cg-pane' }, needsSetup(ctx, d, 'No FTP server connected yet'));
   const all = d.transfers || [];
   const failed = all.filter((t) => t.status === 'failed');
   const shown = all.filter((t) => !ui.only || t.status === ui.only);
@@ -37,7 +36,7 @@ const pane = screen((api) => {
       : h('p', { class: 'cg-note', text: all.length ? 'Nothing matches that filter.' : 'No transfers yet. Press Sync FTP now to mirror files.' }));
 
   const trend = h('section', { class: 'cg-card' }, h('h3', { text: 'Transfers, last 24 hours' }), line(ctx, 'Transfers, last 24 hours', 'Transfers', d.hours));
-  return h('div', { class: 'cg-pane cg-focus' }, top, attention, trend, timeline);
+  return h('div', { class: 'cg-pane cg-focus' }, demoBanner(ctx, d), top, attention, trend, timeline);
 });
 
 export function render(root, ctx) { return pane.render(root, ctx); }

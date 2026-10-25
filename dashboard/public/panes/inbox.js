@@ -1,5 +1,5 @@
 // Project inbox: the triaged message queue on the left, the triage rules and their split on the right.
-import { screen, chip, demoChip, needsSetup, bigNumber, message, actionButton, chips, TONE } from './common.js';
+import { screen, chip, demoChip, demoBanner, bigNumber, message, actionButton, chips, TONE } from './common.js';
 
 const initial = (from) => ((String(from).replace(/<.*$/, '').trim() || '?').match(/[A-Za-z0-9]/) || ['?'])[0].toUpperCase();
 
@@ -15,7 +15,6 @@ function ruleForm(api) {
 
 const pane = screen((api) => {
   const { ctx, d, ui, h } = api;
-  if (!d.configured) return h('div', { class: 'cg-pane' }, needsSetup(ctx, d, 'No mailbox connected yet'));
   const msgs = d.messages || [];
   const ruleKeys = [...new Set(msgs.filter((m) => m.rule).map((m) => m.rule))];
   const pick = ui.rule || 'all';
@@ -48,7 +47,7 @@ const pane = screen((api) => {
           ctx.me.role === 'admin' ? h('button', { class: 'linkbtn danger', type: 'button', disabled: !!ui.busy, 'aria-label': 'Remove rule ' + r.name, text: 'Remove', onclick: () => api.act('remove-rule', { name: r.name }) }) : null)))
         : h('p', { class: 'cg-note', text: 'No rules yet. Every message will be logged as “No rule matched”.' }),
       ruleForm(api)));
-  return h('div', { class: 'cg-pane cg-split' }, queue, rail);
+  return h('div', { class: 'cg-pane' }, demoBanner(ctx, d), h('div', { class: 'cg-pane cg-split' }, queue, rail));
 });
 
 export function render(root, ctx) { return pane.render(root, ctx); }

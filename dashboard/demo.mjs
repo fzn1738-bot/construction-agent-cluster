@@ -1,27 +1,28 @@
 // Demo data for the Construction Agent dashboard: the same exports as hooks.mjs, filled with a realistic, seeded
-// site (Harlow Build, a four-storey office fit-out). The server serves this until the site folder, the contractor
-// FTP login and the project mailbox are set up in Connections. Everything here is in memory: nothing touches
-// the real folder, FTP server, mailbox or database. Buttons add records so every screen can be tried.
+// site (Harlow Build, a four-storey office fit-out). The server serves this while no outcome is set up. Everything
+// here is in memory: nothing touches the real folder, FTP server, mailbox or database, and buttons add records so
+// every screen can be tried. Two screens are deliberately real even here, because they are how you leave the demo:
+// Keys in Settings and Outside services show (masked) what is really saved, and saving a key there really saves it.
+// hooks.mjs also borrows these records for any single outcome that is not set up yet.
 import fs from 'node:fs';
 import path from 'node:path';
-import { fileURLToPath } from 'node:url';
+import * as kit from './store.mjs';
+import * as O from './outcomes.mjs';
 
-const HERE = path.dirname(fileURLToPath(import.meta.url));
-const DATA = process.env.HQ_APP_DATA || path.join(HERE, 'data');
-const SPEC = JSON.parse(fs.readFileSync(path.join(HERE, 'dashboard.json'), 'utf8'));
-const SPEC_PANELS = SPEC.panels.map((p) => p.title);
-const PANE_OF_PANEL = Object.fromEntries(SPEC.panes.flatMap((p) => p.panels.map((t) => [t, p.id])));
+const DATA = kit.DATA;
+const REPORTS = path.join(DATA, 'reports');
+const SPEC = O.SPEC;
+const { PANE } = O;
 
-export const actions = SPEC.actions.map((a) => {
-  const pane = SPEC.panes.find((p) => (p.actions || []).includes(a.id));
-  return { id: a.id, label: a.label, description: a.description || '', input: a.input || null, pane: pane ? pane.id : 'overview', ...(a.adminOnly ? { adminOnly: true } : {}) };
-});
+export const actions = O.actionsFromSpec();
 
 // ---------- seeded records ----------
 function rng(seed) { let a = seed >>> 0; return () => { a = (a + 0x6d2b79f5) >>> 0; let t = a; t = Math.imul(t ^ (t >>> 15), t | 1); t ^= t + Math.imul(t ^ (t >>> 7), t | 61); return ((t ^ (t >>> 14)) >>> 0) / 4294967296; }; }
 const rand = rng(839);
-const iso = (minsAgo) => new Date(Date.now() - minsAgo * 60000).toISOString();
-const rel = (at) => { const m = Math.max(0, Math.round((Date.now() - Date.parse(at)) / 60000)); return m < 1 ? 'just now' : m < 60 ? m + ' min ago' : m < 1440 ? Math.floor(m / 60) + ' h ago' : Math.floor(m / 1440) + ' d ago'; };
+const BOOT = Date.now();
+const iso = (minsAgo) => new Date(BOOT - minsAgo * 60000).toISOString();
+const nowIso = () => new Date().toISOString();
+const rel = (at) => O.rel(at);
 
 const st = {
   folder: '/Volumes/Projects/Harlow/Incoming',
@@ -46,19 +47,35 @@ const st = {
     [215, 'noreply@weather.example', 'Wind warning for Thursday', 'ignored', null], [330, 'Priya Shah <priya@northbeam.example>', 'RFI 120: balustrade fixings', 'ok', 'rfi'],
     [520, 'accounts@glazeco.example', 'Invoice 3310 - curtain wall deposit', 'ok', 'invoice'], [760, 'unknown@mailer.example', '(unreadable header)', 'malformed', null]
   ].map(([m, from, subject, status, rule], i) => ({ uid: 9040 - i, from, subject, status, rule, at: iso(m), result: { ok: 'Matched', ignored: 'No rule matched', malformed: 'Unreadable', failed: 'Failed' }[status] })),
+  // who pressed what, newest first: scheduled runs every few minutes plus a few people
+  runs: [
+    [3, 'Scheduled scan of the site folder', 'schedule', 'Schedule', 'documents', 1400, true, '1 document filed'],
+    [9, 'Scan site folders', 'owner', 'Fayez N.', 'documents', 3100, true, '2 documents filed'],
+    [11, 'Scheduled FTP sync', 'schedule', 'Schedule', 'transfers', 18400, true, '2 files transferred, 0 failed'],
+    [15, 'Scheduled inbox check', 'schedule', 'Schedule', 'inbox', 2200, true, '1 email triaged'],
+    [41, 'Sync FTP now', 'c-ops', 'Dana (Harlow ops)', 'transfers', 12900, true, '2 files transferred, 0 failed'],
+    [58, 'Scheduled inbox check', 'schedule', 'Schedule', 'inbox', 2600, true, '1 email triaged'],
+    [96, 'Scheduled FTP sync', 'schedule', 'Schedule', 'transfers', 15100, true, '2 files transferred, 0 failed'],
+    [102, 'Check inbox now', 'owner', 'Fayez N.', 'inbox', 1900, true, '1 email triaged'],
+    [171, 'Scheduled FTP sync', 'schedule', 'Schedule', 'transfers', 31000, false, 'Failed: Crane_Lift_Plan.pdf: connection timed out after 10 s'],
+    [205, 'Scheduled scan of the site folder', 'schedule', 'Schedule', 'documents', 1200, true, '1 document filed'],
+    [246, 'Scheduled FTP sync', 'schedule', 'Schedule', 'transfers', 21700, true, '2 files transferred, 0 failed'],
+    [330, 'Check the record', 'owner', 'Fayez N.', 'activity-log', 600, true, 'Record integrity check passed'],
+    [415, 'Scheduled scan of the site folder', 'schedule', 'Schedule', 'documents', 1300, true, '1 document filed'],
+    [520, 'Scheduled inbox check', 'schedule', 'Schedule', 'inbox', 2400, true, '1 email triaged']
+  ].map(([m, label, byId, byName, outcome, ms, ok, message]) => ({ at: iso(m), label, byId, byName, outcome, ms, ok, message })),
   runsPerHour: Array.from({ length: 24 }, (_, i) => Math.round(2 + rand() * 4 + (i > 6 && i < 19 ? 3 : 0))),
-  checked: 0
+  latency: { ftp: Array.from({ length: 12 }, () => Math.round(180 + rand() * 90)), imap: Array.from({ length: 12 }, () => Math.round(150 + rand() * 70)) },
+  tests: { folders: { ok: true, message: 'Folder readable: 1,284 item(s)', at: iso(1) }, ftp: { ok: true, message: 'Logged in in 212 ms', at: iso(3) }, imap: { ok: true, message: 'Signed in in 187 ms', at: iso(2) } },
+  checked: 0, snapshots: 0
 };
 let seq = 0;
 const POOL = ['A-102_Level3_Plan_RevA.pdf', 'S-210_Roof_Framing.dwg', 'Site_Photo_0413.jpg', 'Inspection_Request_44.pdf', 'Rebar_Delivery_Docket.pdf', 'M-310_Pipework_RevA.pdf'];
 const word = { ok: 'OK', failed: 'Failed', skipped: 'Skipped' };
+const pushRun = (label, outcome, ms, ok, message, by = { id: 'owner', name: 'Owner' }) => st.runs.unshift({ at: nowIso(), label, byId: by.id, byName: by.name, outcome, ms, ok, message });
 
-// ---------- derived views (same shapes as hooks.mjs) ----------
-function hourly(items) {
-  const values = new Array(24).fill(0);
-  for (const r of items) { const age = Math.floor((Date.now() - Date.parse(r.at)) / 3600000); if (age >= 0 && age < 24) values[23 - age]++; }
-  return { labels: values.map((_, i) => (i === 23 ? 'now' : '-' + (23 - i) + 'h')), values };
-}
+// ---------- the four outcome tabs (same shapes as hooks.mjs) ----------
+const hourly = (items) => O.hourly(items);
 const filed = () => st.arrivals.filter((a) => a.status === 'ok').length;
 const moved = () => st.transfers.filter((t) => t.status === 'ok').length;
 const failedT = () => st.transfers.filter((t) => t.status === 'failed').length;
@@ -100,36 +117,101 @@ function activityData(filter = {}) {
   return { source: 'demo', configured: true, filter: { type: TYPES.includes(filter.type) ? filter.type : 'all', result: RESULTS.includes(filter.result) ? filter.result : 'all' }, types: TYPES, results: RESULTS,
     summary: { rows: logRows(), integrity: true, problems: [], tables: [['checkpoints', 4], ['sync_log', logRows()], ['task_state', 3]] }, events: activityEvents(filter).slice(0, 200), byType: { labels: [...types.keys()], values: [...types.values()] } };
 }
+const OUTCOME_DATA = { documents: documentsData, transfers: transfersData, inbox: inboxData, 'activity-log': activityData };
 
-export async function pane(id) {
-  if (id === 'documents') return documentsData();
-  if (id === 'transfers') return transfersData();
-  if (id === 'inbox') return inboxData();
-  if (id === 'activity-log') return activityData();
-  return null;
+// ---------- the demo world (see outcomes.mjs) ----------
+const STATE = {
+  documents: () => ({ state: 'ok', text: filed() + ' documents filed' }),
+  transfers: () => (failedT() ? { state: 'warn', text: failedT() + ' failed transfer' + (failedT() === 1 ? '' : 's') + ' to retry' } : { state: 'ok', text: moved() + ' files transferred' }),
+  inbox: () => ({ state: 'ok', text: triaged() + ' emails triaged' }),
+  'activity-log': () => ({ state: 'ok', text: logRows() + ' events on record' })
+};
+const FACTS = {
+  documents: () => ({ count: filed(), list: st.arrivals.filter((a) => a.status === 'ok'), rows: st.arrivals.length, last: st.arrivals[0].at }),
+  transfers: () => ({ count: moved(), list: st.transfers.filter((t) => t.status === 'ok'), rows: st.transfers.length, last: st.transfers[0].at }),
+  inbox: () => ({ count: triaged(), list: st.messages, rows: st.messages.length, last: st.messages[0].at }),
+  'activity-log': () => ({ count: logRows(), list: activityEvents(), rows: Math.min(200, activityEvents().length), last: activityEvents()[0].at })
+};
+const ENDPOINT = { folders: '/Volumes/Projects/Harlow/Incoming', ftp: 'ftp.northbeam.example:21', imap: 'imap.harlowbuild.example:993', database: 'agent.db' };
+
+/** The real state of the keys and services: it is what Keys in Settings and Outside services are for, even in the demo. */
+function realSetup() {
+  const s = kit.getSettings();
+  const conns = kit.connections();
+  const updates = kit.readJSON('key-updates.json', {});
+  const keys = O.KEYS.map((k) => {
+    const value = s[k.key] == null || s[k.key] === '' ? null : String(s[k.key]);
+    const test = (conns.find((c) => c.id === k.conn) || {}).test || null;
+    const updated = updates[k.key] ? updates[k.key].at : null;
+    const src = kit.settingSource(k.key);
+    return { ...k, value, source: src === 'settings' ? 'Settings' : src === 'env' ? '.env' : null, updated, status: !value ? 'Missing' : test && (!updated || Date.parse(test.at) >= Date.parse(updated)) ? (test.ok ? 'Valid' : 'Failed') : 'Set' };
+  });
+  const setup = O.SERVICES.filter((x) => x.outside).map((svc) => {
+    const c = conns.find((x) => x.id === svc.id) || { ready: false, missing: [], test: null };
+    return { ...svc, ready: c.ready, missing: c.missing.map(O.settingLabel), fields: (svc.fields || []).map((key) => ({ label: O.settingLabel(key), set: !!s[key], source: kit.settingSource(key) === 'settings' ? 'Settings' : kit.settingSource(key) === 'env' ? '.env' : 'Not set' })), test: c.test || null, state: c.ready ? 'ok' : 'idle', stateText: c.ready ? 'Set up' : 'Key missing' };
+  });
+  return { keys, setup };
 }
 
-export async function status() {
-  return { mood: 'ok', headline: 'Healthy', detail: 'Demo data: 3 task(s) scheduled, loop running', primary: { label: 'Active Tasks', value: '0' },
-    ring: [{ label: 'Polling Folders', value: 1 }, { label: 'FTP Transfers', value: moved() }, { label: 'Emails Processed', value: triaged() }] };
-}
-
-export async function paneStatus() {
-  const f = failedT();
-  return {
-    documents: { state: 'ok', text: filed() + ' documents filed' },
-    transfers: f ? { state: 'warn', text: f + ' failed transfer' + (f === 1 ? '' : 's') + ' to retry' } : { state: 'ok', text: moved() + ' files transferred' },
-    inbox: { state: 'ok', text: triaged() + ' emails triaged' },
-    'activity-log': { state: 'ok', text: logRows() + ' events on record' }
+function world() {
+  const now = Date.now();
+  const outcomes = {};
+  for (const d of O.OUTCOMES) {
+    const f = FACTS[d.id]();
+    outcomes[d.id] = { source: 'live', configured: true, state: STATE[d.id](), needs: null, missing: [], count: f.count, today: f.list.filter((x) => O.isToday(x.at, now)).length, last: f.last, rows: f.rows };
+  }
+  const services = O.SERVICES.map((svc) => {
+    const latency = svc.id === 'ftp' ? st.latency.ftp[11] : svc.id === 'imap' ? st.latency.imap[11] : svc.id === 'folders' ? 4 : 1;
+    return { ...svc, ready: true, missing: [], fields: (svc.fields || []).map((k) => ({ label: O.settingLabel(k), set: true, source: 'Settings' })), endpoint: ENDPOINT[svc.id], test: st.tests[svc.id] || null, latency, state: 'ok', stateText: 'Connected', checkedAt: (st.tests[svc.id] || {}).at || new Date(now).toISOString() };
+  });
+  const { keys, setup } = realSetup();
+  const labels = Array.from({ length: 12 }, (_, i) => (i === 11 ? 'now' : '-' + (11 - i) * 5 + 'm'));
+  const hours = hourly([]).labels;
+  const handled = hourly([...st.arrivals, ...st.transfers.filter((t) => t.status === 'ok'), ...st.messages]);
+  const recent = st.runs.slice(0, 50);
+  const w = {
+    now, demo: true, demoSwitch: (() => { const d = kit.readJSON('demo.json', null); return { on: d ? !!d.on : true, auto: !d || d.auto === true }; })(), outcomes, services, setup, keys, runs: st.runs,
+    success: Math.round((recent.filter((r) => r.ok).length / recent.length) * 100), lastRunAt: st.runs[0].at, problem: null, idle: null, working: 0,
+    taskHours: { labels: hours, values: st.runsPerHour }, handledHours: handled,
+    latency: { labels, series: [{ name: 'FTP', service: 'ftp', values: st.latency.ftp }, { name: 'IMAP', service: 'imap', values: st.latency.imap }] },
+    rowsByPane: {}
   };
+  w.rowsByPane = O.rowsOf(w);
+  for (const id of Object.values(PANE)) if (id !== PANE.screens) w.rowsByPane[id] = (O.metaPane(id, w, () => true, { admin: true }, {}) || { rows: [] }).rows.length;
+  w.rowsByPane[PANE.screens] = (SPEC.panes || []).length;
+  return w;
 }
+// Outside services in the demo: the real setup checklist (it is how the demo is left), with the demo story for the rest.
+const demoServices = (w) => ({ ...w, services: [...w.setup, ...w.services.filter((s) => !s.outside)] });
+
+// ---------- the exports ----------
+export async function pane(id, ctx = {}) {
+  if (OUTCOME_DATA[id]) return OUTCOME_DATA[id]();
+  if (!Object.values(PANE).includes(id)) return null;
+  const w = world();
+  const allow = await allowOf(ctx);
+  const opts = { admin: !ctx || !ctx.user || ctx.user.role === 'admin', me: ctx && ctx.user ? ctx.user.id : null };
+  return O.metaPane(id, id === PANE.services ? demoServices(w) : w, allow, opts, O.paneStates(w));
+}
+// The same access rule as the real hooks (a client sees rows only for the outcomes they were given).
+async function allowOf(ctx) {
+  if (!ctx || !ctx.user || ctx.user.role === 'admin') return () => true;
+  if (ctx.user.id === 'preview-client') return () => true;
+  const u = kit.users().find((x) => x.id === ctx.user.id && !x.disabled);
+  if (!u) return () => false;
+  const ids = new Set(kit.allowedPanes(kit.publicUser(u)).map((p) => p.id));
+  return (pid) => ids.has(pid);
+}
+
+export async function status() { return O.statusOf(world()); }
+export async function paneStatus() { const w = world(); return { ...O.paneStates(w), [PANE.services]: O.paneStates(demoServices(w))[PANE.services] }; }
 
 export async function metrics() {
+  const w = world();
   const t = (items) => hourly(items).values;
+  const meta = O.metaMetrics(w).map((m) => (m.key === 'ready' ? O.metaMetrics(demoServices(w)).find((x) => x.key === 'ready') : m));
   return [
-    { key: 'activeTasks', label: 'Active tasks', value: 0, unit: '', trend: [0, 1, 0, 0, 1, 0], good: 'down', pane: 'overview' },
-    { key: 'syncRate', label: 'Sync rate', value: 96, unit: '%', trend: [92, 94, 95, 93, 97, 96, 96], good: 'up', pane: 'overview' },
-    { key: 'avgRunMs', label: 'Avg run time', value: 840, unit: 'ms', trend: [910, 870, 860, 820, 850, 830, 840], good: 'down', pane: 'overview' },
+    ...meta,
     { key: 'docsFiled', label: 'Documents filed', value: filed(), unit: '', trend: t(st.arrivals), good: 'up', pane: 'documents' },
     { key: 'docsWaiting', label: 'Files waiting', value: 0, unit: '', trend: [0, 1, 0, 0], good: 'down', pane: 'documents' },
     { key: 'ftpTransfers', label: 'Files transferred', value: moved(), unit: '', trend: t(st.transfers), good: 'up', pane: 'transfers' },
@@ -142,63 +224,95 @@ export async function metrics() {
 }
 
 export async function panels() {
+  const w = world();
   const docs = documentsData(), tr = transfersData(), inb = inboxData(), act = activityData();
   const line = (title, name, b, pane) => ({ title, kind: 'line', labels: b.labels, series: [{ name, values: b.values }], pane });
-  const all = {
-    'Runs, last 24 hours': () => line('Runs, last 24 hours', 'Runs', { labels: docs.hours.labels, values: st.runsPerHour }, 'overview'),
-    Monitors: () => ({ title: 'Monitors', kind: 'table', columns: ['Monitor', 'State', 'Last run', 'Queue'], rows: [...monitorsOf('folder'), ...monitorsOf('ftp'), ...monitorsOf('imap')].map((m) => [m.name, { text: m.state, tone: m.tone }, m.last, m.queue]), pane: 'overview' }),
+  const own = {
     'Arrivals, last 24 hours': () => line('Arrivals, last 24 hours', 'Files', docs.hours, 'documents'),
-    'Recent arrivals': () => ({ title: 'Recent arrivals', kind: 'table', columns: ['File', 'Folder', 'Event', 'When'], rows: docs.arrivals.slice(0, 12).map((a) => [a.file, a.folder, a.event, rel(a.at)]) }),
+    'Recent arrivals': () => ({ title: 'Recent arrivals', kind: 'table', columns: ['File', 'Folder', 'Event', 'When'], rows: docs.arrivals.slice(0, 12).map((a) => [a.file, a.folder, a.event, rel(a.at)]), pane: 'documents' }),
     'Transfers, last 24 hours': () => line('Transfers, last 24 hours', 'Transfers', tr.hours, 'transfers'),
-    'Transfer history': () => ({ title: 'Transfer history', kind: 'table', columns: ['File', 'Direction', 'Result', 'When'], rows: tr.transfers.slice(0, 12).map((t) => [t.file, t.op, t.status === 'failed' ? 'Failed: ' + t.error : word[t.status], rel(t.at)]) }),
-    'Triage by rule': () => ({ title: 'Triage by rule', kind: 'bar', labels: inb.byRule.labels, series: [{ name: 'Messages', values: inb.byRule.values }] }),
-    'Recent messages': () => ({ title: 'Recent messages', kind: 'table', columns: ['From', 'Subject', 'Result', 'When'], rows: inb.messages.slice(0, 12).map((m) => [m.from, m.subject, m.result + (m.rule ? ': ' + m.rule : ''), rel(m.at)]) }),
-    'Events by source': () => ({ title: 'Events by source', kind: 'bar', labels: act.byType.labels, series: [{ name: 'Events', values: act.byType.values }] }),
-    'Latest events': () => ({ title: 'Latest events', kind: 'table', columns: ['Source', 'Result', 'What', 'When'], rows: act.events.slice(0, 12).map((e) => [e.source, e.result, e.what, rel(e.at)]) })
+    'Transfer history': () => ({ title: 'Transfer history', kind: 'table', columns: ['File', 'Direction', 'Result', 'When'], rows: tr.transfers.slice(0, 12).map((t) => [t.file, t.op, t.status === 'failed' ? 'Failed: ' + t.error : word[t.status], rel(t.at)]), pane: 'transfers' }),
+    'Triage by rule': () => ({ title: 'Triage by rule', kind: 'bar', labels: inb.byRule.labels, series: [{ name: 'Messages', values: inb.byRule.values }], pane: 'inbox' }),
+    'Recent messages': () => ({ title: 'Recent messages', kind: 'table', columns: ['From', 'Subject', 'Result', 'When'], rows: inb.messages.slice(0, 12).map((m) => [m.from, m.subject, m.result + (m.rule ? ': ' + m.rule : ''), rel(m.at)]), pane: 'inbox' }),
+    'Events by source': () => ({ title: 'Events by source', kind: 'bar', labels: act.byType.labels, series: [{ name: 'Events', values: act.byType.values }], pane: 'activity-log' }),
+    'Latest events': () => ({ title: 'Latest events', kind: 'table', columns: ['Source', 'Result', 'What', 'When'], rows: act.events.slice(0, 12).map((e) => [e.source, e.result, e.what, rel(e.at)]), pane: 'activity-log' })
   };
-  return SPEC_PANELS.filter((t) => all[t]).map((t) => ({ pane: PANE_OF_PANEL[t] || 'overview', ...all[t]() }));
+  const meta = Object.fromEntries([...O.metaPanels(w), O.metaPanels(demoServices(w)).find((p) => p.title === 'Service checklist')].map((p) => [p.title, p]));
+  return SPEC.panels.map((p) => (own[p.title] ? own[p.title]() : meta[p.title])).filter(Boolean);
 }
 
 // ---------- actions (they add records so the screens respond) ----------
-function scan() {
+function scan(by) {
   const n = 1 + (seq % 2); const files = [];
-  for (let i = 0; i < n; i++) { const file = POOL[seq++ % POOL.length]; files.push(file); st.arrivals.unshift({ file, folder: 'site', event: 'Filed', status: 'ok', at: iso(0), size: 400000 + seq * 91000, error: null }); }
-  return { ok: true, message: 'Scanned 1 folder: ' + n + ' new document' + (n === 1 ? '' : 's') + ' filed (demo)', output: { files } };
+  for (let i = 0; i < n; i++) { const file = POOL[seq++ % POOL.length]; files.push(file); st.arrivals.unshift({ file, folder: 'site', event: 'Filed', status: 'ok', at: nowIso(), size: 400000 + seq * 91000, error: null }); }
+  const message = 'Scanned 1 folder: ' + n + ' new document' + (n === 1 ? '' : 's') + ' filed (demo)';
+  pushRun('Scan site folders', 'documents', 1100 + seq * 70, true, n + ' document' + (n === 1 ? '' : 's') + ' filed', by);
+  return { ok: true, message, output: { files } };
 }
-function sync() {
+function sync(by) {
   const file = POOL[seq++ % POOL.length];
-  st.transfers.unshift({ file, op: seq % 2 ? 'upload' : 'download', status: 'ok', bytes: 750000 + seq * 53000, monitor: 'site', at: iso(0), reason: 'new', error: null });
+  st.transfers.unshift({ file, op: seq % 2 ? 'upload' : 'download', status: 'ok', bytes: 750000 + seq * 53000, monitor: 'site', at: nowIso(), reason: 'new', error: null });
+  st.latency.ftp.push(st.latency.ftp.shift());
+  pushRun('Sync FTP now', 'transfers', 9000 + seq * 300, true, '1 file transferred, 0 failed', by);
   return { ok: true, message: '1 file transferred, 0 failed (demo)', output: { file } };
 }
-function check() {
+function check(by) {
   st.checked++;
-  st.messages.unshift({ uid: 9041 + st.checked, from: 'Priya Shah <priya@northbeam.example>', subject: 'RFI ' + (122 + st.checked) + ': follow-up on slab edge', status: 'ok', rule: 'rfi', at: iso(0), result: 'Matched' });
+  st.messages.unshift({ uid: 9041 + st.checked, from: 'Priya Shah <priya@northbeam.example>', subject: 'RFI ' + (122 + st.checked) + ': follow-up on slab edge', status: 'ok', rule: 'rfi', at: nowIso(), result: 'Matched' });
+  pushRun('Check inbox now', 'inbox', 1800 + st.checked * 40, true, '1 email triaged', by);
   return { ok: true, message: '1 new email triaged: matched rule rfi (demo)', output: { checked: st.checked } };
 }
+const record = (by) => { pushRun('Check the record', 'activity-log', 600, true, 'Record integrity check passed', by); return { ok: true, message: 'Record integrity check passed (demo)', output: { tables: activityData().summary.tables } }; };
+const DO = { documents: scan, transfers: sync, inbox: check, 'activity-log': record };
+const byOf = (ctx) => (ctx && ctx.user ? { id: ctx.user.id, name: ctx.user.name || 'Owner' } : { id: 'owner', name: 'Owner' });
+const NOT_YOURS = 'That outcome is not part of your access.';
 
-export async function run(id, input) {
-  if (id === 'scan-folders') return scan();
-  if (id === 'sync-ftp') return sync();
-  if (id === 'check-inbox') return check();
-  if (id === 'run') { const a = scan(), b = sync(), c = check(); return { ok: true, message: '3 task(s) run, 0 failed (demo)', output: [a, b, c].map((x, i) => ({ id: ['folder:site', 'ftp:site', 'imap:pm'][i], status: 'ok', attempts: 1 })) }; }
-  if (id === 'check-database') return { ok: true, message: 'Record integrity check passed (demo)', output: { tables: activityData().summary.tables } };
+async function runMine(allow, by) {
+  const mine = O.OUTCOMES.filter((o) => o.kind && allow(o.id));
+  if (!mine.length) return { ok: false, message: 'None of the outcomes that run are part of your access.' };
+  const parts = mine.map((o) => [o, DO[o.id](by)]);
+  return { ok: true, message: parts.map(([o, r]) => o.short + ': ' + r.message).join(' · '), output: parts.map(([o, r]) => ({ outcome: o.id, ok: r.ok, demo: true })) };
+}
+function snapshot() {
+  fs.mkdirSync(REPORTS, { recursive: true });
+  st.snapshots++;
+  const file = 'site-map-' + new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19) + '.md';
+  fs.writeFileSync(path.join(REPORTS, file), O.snapshotMarkdown(world()));
+  return { ok: true, message: 'Snapshot saved to Reports (demo): ' + O.statusOf(world()).headline, output: { href: 'reports/' + file } };
+}
+
+export async function run(id, input, ctx = {}) {
+  const allow = await allowOf(ctx); const by = byOf(ctx);
+  const o = O.OUTCOMES.find((x) => x.action === id);
+  if (o) return allow(o.id) ? DO[o.id](by) : { ok: false, message: NOT_YOURS };
+  if (id === 'run') { const r = await runMine(allow, by); return { ...r, message: r.output ? r.output.length + ' task(s) run, 0 failed (demo)' : r.message }; }
+  if (id === 'run-outcomes') return runMine(allow, by);
+  if (id === 'check-outcomes') {
+    const oc = O.outcomesPane(world(), allow);
+    return { ok: true, message: oc.items.length + ' outcomes on demo data: ' + oc.items.map((i) => i.tab + ' ' + i.state.text).join(' · '), output: oc.items.map((i) => ({ id: i.id, status: i.status })) };
+  }
+  if (id === 'snapshot') return snapshot();
+  if (id === 'test-connections') return { ok: true, message: 'Demo: Site folder 4 ms · Contractor FTP 212 ms · Project mailbox 187 ms. Enter your own details to test the real services.' };
   if (id === 'run-monitor') {
     const want = String(input || '').trim();
     const map = { 'folder:site': scan, 'ftp:site': sync, 'imap:pm': check };
     if (!want) return { ok: false, message: 'Enter a monitor id, e.g. folder:site' };
     if (!map[want]) return { ok: false, message: 'Unknown monitor "' + want.slice(0, 80) + '". Available: folder:site, ftp:site, imap:pm' };
-    return map[want]();
+    return map[want](by);
   }
   return { ok: false, message: 'Unknown action' };
 }
 
 const ADMIN_ONLY = 'Only the admin can change settings.';
+const real = () => import('./hooks.mjs');   // keys are saved for real even from the demo: that is how you leave it
+
 export async function paneAction(id, action, input, ctx = {}) {
   const inp = input && typeof input === 'object' ? input : {};
-  const admin = ctx && ctx.user && ctx.user.role === 'admin';
-  const fresh = async (r) => ({ ...r, data: await pane(id) });
-  const kindRun = { documents: 'scan-folders', transfers: 'sync-ftp', inbox: 'check-inbox' }[id];
-  if (kindRun && ['scan', 'sync', 'check'].includes(action)) return fresh(await run(kindRun));
+  const admin = !ctx || !ctx.user || ctx.user.role === 'admin';
+  const allow = await allowOf(ctx); const by = byOf(ctx);
+  const fresh = async (r) => ({ ...r, data: await pane(id, ctx) });
+  const o = O.outcomeOf(id);
+  if (o && o.kind && action === o.verb) return fresh(await run(o.action, null, ctx));
   if (id === 'documents' && action === 'set-folder') {
     if (!admin) return { ok: false, message: ADMIN_ONLY };
     const p = String(inp.path || '').trim();
@@ -223,8 +337,32 @@ export async function paneAction(id, action, input, ctx = {}) {
     return fresh({ ok: true, message: (action === 'add-rule' ? 'Rule "' + name + '" saved' : 'Rule "' + name + '" removed') + ' (demo)' });
   }
   if (id === 'activity-log') {
-    if (action === 'export') { await reports(); return { ok: true, message: 'Exported ' + activityEvents().length + ' events (demo)', data: { ...activityData(), href: 'reports/activity-record.csv' } }; }
-    if (action === 'check') return fresh(await run('check-database'));
+    if (action === 'check') return fresh(record(by));
+    if (action === 'export') {
+      const ev = activityEvents();
+      const csv = ['Time,Source,Result,What', ...ev.map((e) => [e.at, e.source, e.result, e.what].map((v) => '"' + String(v).replace(/"/g, '""') + '"').join(','))].join('\n') + '\n';
+      return { ok: true, message: 'Exported ' + ev.length + ' events (demo)', data: { ...activityData(), export: { filename: 'activity-record-demo.csv', csv } } };
+    }
+  }
+  if (id === PANE.outcomes && action === 'check') return fresh(await run('check-outcomes', null, ctx));
+  if (id === PANE.history) {
+    const target = O.OUTCOMES.find((x) => x.kind && x.verb === action);
+    if (target) return fresh(allow(target.id) ? DO[target.id](by) : { ok: false, message: NOT_YOURS });
+    if (action === 'run-all') return fresh(await runMine(allow, by));
+  }
+  if (id === PANE.map && action === 'snapshot') return fresh(snapshot());
+  if (id === PANE.screens && action === 'check') { const d = await pane(id, ctx); return { ok: true, message: d.cards.length + ' screens checked: ' + d.summary.ready + ' with data (demo)', data: d }; }
+  if (id === PANE.health && (action === 'test' || action === 'test-all')) {
+    if (!admin) return { ok: false, message: 'Only the admin can test connections.' };
+    const ids = action === 'test-all' ? ['folders', 'ftp', 'imap'] : [String(inp.id || '')];
+    if (!ids.every((x) => x === 'database' || st.tests[x])) return { ok: false, message: 'No such connection' };
+    for (const x of ids) if (st.tests[x]) st.tests[x] = { ...st.tests[x], at: nowIso() };
+    return fresh({ ok: true, message: 'Demo: ' + ids.join(', ') + ' reachable. Enter your own details in Keys in Settings to test the real services.' });
+  }
+  // the real way out of the demo: these change and test the real keys
+  if ((id === PANE.keys && (action === 'save-key' || action === 'clear-key')) || (id === PANE.services && (action === 'test' || action === 'test-all')) || (id === PANE.demo && action === 'auto')) {
+    const r = await (await real()).paneAction(id, action, input, ctx);
+    return { ...r, data: await pane(id, ctx) };
   }
   return { ok: false, message: 'Unknown action' };
 }
@@ -238,10 +376,12 @@ export async function testConnection(id) {
 export async function onSettings() {}
 
 export async function reports() {
-  fs.mkdirSync(path.join(DATA, 'reports'), { recursive: true });
-  const now = new Date().toISOString();
-  fs.writeFileSync(path.join(DATA, 'reports', 'task-history.md'), ['# Task History (demo)', 'Generated ' + now, '', '- folder:site: ok', '- ftp:site: ok', '- imap:pm: ok', ''].join('\n'));
-  fs.writeFileSync(path.join(DATA, 'reports', 'sync-performance.md'), ['# Sync Performance (demo)', 'Generated ' + now, '', 'Sync rate: 96% (48/50 of the last runs)', '', '- folder: 20/20 ok', '- ftp: 14/16 ok', '- imap: 14/14 ok', ''].join('\n'));
-  fs.writeFileSync(path.join(DATA, 'reports', 'activity-record.csv'), ['Time,Source,Result,What', ...activityEvents().map((e) => [e.at, e.source, e.result, e.what].map((v) => '"' + String(v).replace(/"/g, '""') + '"').join(','))].join('\n') + '\n');
-  return [{ title: 'Task History', href: 'reports/task-history.md', createdAt: now }, { title: 'Sync Performance', href: 'reports/sync-performance.md', createdAt: now }, { title: 'Activity record (CSV)', href: 'reports/activity-record.csv', createdAt: now }];
+  fs.mkdirSync(REPORTS, { recursive: true });
+  const day = new Date().toISOString().slice(0, 10);
+  const overall = 'overall-state-' + day + '.md';
+  if (!fs.existsSync(path.join(REPORTS, overall))) fs.writeFileSync(path.join(REPORTS, overall), O.snapshotMarkdown(world(), 'Overall state, ' + day));
+  return fs.readdirSync(REPORTS).filter((f) => /^(overall-state|site-map)-[\w-]+\.md$/.test(f))
+    .map((f) => ({ f, at: fs.statSync(path.join(REPORTS, f)).mtime.toISOString() }))
+    .sort((a, b) => b.at.localeCompare(a.at)).slice(0, 30)
+    .map(({ f, at }) => ({ title: f.startsWith('site-map') ? 'Site map snapshot (demo)' : 'Overall state, ' + f.slice(14, 24), href: 'reports/' + f, createdAt: at }));
 }

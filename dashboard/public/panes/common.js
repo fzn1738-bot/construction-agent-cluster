@@ -13,14 +13,32 @@ export const TONE = { ok: 'ok', Filed: 'ok', Matched: 'ok', OK: 'ok', Updated: '
 export function chip(h, text, tone = '') { return h('span', { class: 'cg-chip ' + (tone || ''), text }); }
 export const demoChip = (h, d) => (d && d.source === 'demo' ? chip(h, 'Demo data', 'demo') : null);
 
-/** Empty state: what to do next. Admins get a link to Connections. */
-export function needsSetup(ctx, d, title) {
+export const KEYS_PANE = 'keys-entered-in-settings';
+
+/**
+ * A screen showing demo records says so, and what makes it live. While its own service is not set up an outcome
+ * tab shows demo records (d.configured false); the admin gets a link to Keys in Settings.
+ */
+export function demoBanner(ctx, d) {
   const { h } = ctx;
-  return h('section', { class: 'cg-card cg-empty' },
-    h('h3', { text: title }),
-    h('p', { text: (d.needs || 'Nothing is connected yet') + '. Until then this screen has nothing real to show.' }),
-    ctx.me.role === 'admin' ? h('a', { class: 'btn primary', href: '#/admin/connections', text: 'Open Connections' }) : h('p', { class: 'cg-note', text: 'Ask your administrator to connect it.' }));
+  if (!d || d.source !== 'demo') return null;
+  const own = d.configured === false;
+  return h('section', { class: 'cg-card cg-banner', role: 'note' },
+    h('div', { class: 'cg-head' }, h('h3', { text: own ? 'Showing demo records' : 'Demo data' }), chip(h, 'Demo data', 'demo')),
+    h('p', { class: 'cg-note', text: own ? (d.needs || 'Enter the keys for this service') + ' to see your own records here. Buttons work on the demo records until then.' : 'Every number on this screen is a demo sample until the keys are saved.' }),
+    own && d.missing && d.missing.length ? h('p', { class: 'cg-note', text: 'Still missing: ' + d.missing.join(', ') }) : null,
+    ctx.me.role === 'admin' ? h('div', { class: 'cg-actions' }, h('a', { class: 'btn', href: '#/pane/' + KEYS_PANE, text: 'Open Keys in Settings' })) : null);
 }
+
+/** A small wireframe of a screen's layout: split (main + rail), focus (stacked bands) or grid (tiles). */
+export function wireframe(h, layout) {
+  const blocks = layout === 'split' ? ['main', 'rail', 'main', 'rail'] : layout === 'focus' ? ['band', 'band', 'band'] : ['tile', 'tile', 'tile', 'tile'];
+  return h('span', { class: 'cg-wire cg-wire-' + layout, 'aria-hidden': 'true' }, blocks.map((b) => h('i', { class: 'cg-wire-' + b })));
+}
+
+/** A state dot with its word, so colour is never alone. */
+export const GLYPH = { ok: '✓', warn: '!', bad: '✕', idle: '–', demo: 'D' };
+export function stateWord(h, tone, text) { return h('span', { class: 'cg-state ' + (tone || 'idle') }, h('i', { 'aria-hidden': 'true', text: GLYPH[tone] || '–' }), h('span', { text })); }
 
 export function bigNumber(h, value, label, note) {
   return h('div', { class: 'cg-big' }, h('b', { text: String(value) }), h('span', { text: label }), note ? h('small', { text: note }) : null);
@@ -91,3 +109,15 @@ export function chips(h, options, current, onPick, label) {
 }
 
 export const line = (ctx, title, name, hours) => ctx.chart({ title, kind: 'line', labels: hours.labels, series: [{ name, values: hours.values }] });
+
+/** A records table that becomes stacked label/value cards under 640px (data-label on each cell). */
+export function records(h, columns, rows, { empty = 'Nothing yet.', cell } = {}) {
+  if (!rows.length) return h('p', { class: 'cg-note', text: empty });
+  const td = (v, j, i) => h('td', { 'data-label': columns[j] }, cell ? cell(v, j, i) : String(v ?? ''));
+  const head = h('thead', {}, h('tr', {}, columns.map((c) => h('th', { scope: 'col', text: c }))));
+  const body = h('tbody', {}, rows.map((r, i) => h('tr', {}, r.map((v, j) => td(v, j, i)))));
+  return h('div', { class: 'cg-records' }, h('table', {}, head, body));
+}
+
+/** "Updated just now" next to the numbers on a screen. */
+export const updated = (h) => h('small', { class: 'cg-updated', text: 'Updated ' + new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) });

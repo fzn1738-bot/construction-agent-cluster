@@ -1,10 +1,21 @@
 // Activity record: a filterable event ledger, a source breakdown, and the integrity of the record itself.
-import { screen, chip, demoChip, bigNumber, message, actionButton, chips, TONE } from './common.js';
+import { screen, chip, demoChip, demoBanner, bigNumber, message, actionButton, chips, TONE } from './common.js';
 
 const LEVEL = { error: 'bad', warn: 'warn', info: 'ok' };
 
 const matches = (e, f) => (f.type === 'all' || e.source === f.type)
   && (f.result === 'all' || (f.result === 'ok' ? e.result === 'ok' : f.result === 'failed' ? ['failed', 'error'].includes(e.result) : !['ok', 'failed', 'error'].includes(e.result)));
+
+// The export arrives with the action's reply and is offered as a download from this tab (never a shared report).
+function download(api) {
+  const { h, d, ui } = api;
+  if (d.export && ui.exportFor !== d.export.filename) {
+    if (ui.url) URL.revokeObjectURL(ui.url);
+    ui.url = URL.createObjectURL(new Blob([d.export.csv], { type: 'text/csv' }));
+    ui.exportFor = d.export.filename;
+  }
+  return ui.url ? h('a', { class: 'btn', href: ui.url, download: ui.exportFor, text: 'Download ' + ui.exportFor }) : null;
+}
 
 const pane = screen((api) => {
   const { ctx, d, ui, h } = api;
@@ -33,13 +44,13 @@ const pane = screen((api) => {
       h('div', { class: 'cg-actions' },
         actionButton(api, 'Check the record', 'check', null, { primary: true, busy: 'Checking…' }),
         actionButton(api, 'Export CSV', 'export', null, { busy: 'Exporting…' })),
-      ui.msg && ui.msg.ok && /Exported/.test(ui.msg.text) ? h('p', { class: 'cg-note' }, 'Your file is ready in ', h('a', { href: '#/reports', text: 'Reports' }), '.') : null,
+      download(api),
       message(h, ui)),
     h('section', { class: 'cg-card' }, h('h3', { text: 'Events by source' }),
       h('ul', { class: 'cg-bars' }, d.byType.labels.map((l, i) => h('li', {}, h('span', { text: l }), h('i', { class: 'cg-bar', 'data-w': String(Math.round((d.byType.values[i] / max) * 10)) }), h('b', { text: String(d.byType.values[i]) }))))),
     h('section', { class: 'cg-card' }, h('h3', { text: 'Stored tables' }),
       h('ul', { class: 'cg-plain' }, (d.summary.tables || []).map(([n, c]) => h('li', { class: 'cg-rule' }, h('span', { class: 'cg-mono', text: n }), h('b', { text: String(c) }))))));
-  return h('div', { class: 'cg-pane cg-split' }, ledger, rail);
+  return h('div', { class: 'cg-pane' }, demoBanner(ctx, d), h('div', { class: 'cg-pane cg-split' }, ledger, rail));
 });
 
 export function render(root, ctx) { return pane.render(root, ctx); }

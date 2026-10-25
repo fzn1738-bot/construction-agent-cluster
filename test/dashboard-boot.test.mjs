@@ -44,7 +44,7 @@ test('the loop starts with the server, before any page or API request', async ()
     assert.deepEqual(mons.columns, ['Monitor', 'State', 'Last run', 'Queue']);
     assert.equal(mons.rows[0][0], 'Folder · drawings');
     assert.ok(['OK', 'Running'].includes(mons.rows[0][1].text), 'state chip ' + JSON.stringify(mons.rows[0][1]));
-    assert.match(mons.rows[0][2], /ago$/); assert.equal(typeof mons.rows[0][3], 'number');
+    assert.match(mons.rows[0][2], /ago$|just now/); assert.equal(typeof mons.rows[0][3], 'number');
   } finally {
     reader.close(); srv.close();
     const hooks = await import('../dashboard/hooks.mjs');
