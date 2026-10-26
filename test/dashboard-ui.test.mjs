@@ -48,8 +48,7 @@ test('F3: every pane screen exports render() and update(), and none breaks the s
 
 test('QA: the HTML shell has no inline event handlers under its strict CSP', () => {
   const html = read('index.html');
-  // the kit's own demo form carries one inert onsubmit (the CSP blocks inline handlers anyway); nothing else may
-  assert.doesNotMatch(html.replace(/ id="demoForm" onsubmit="return false"/, ' id="demoForm"'), /\s(on[a-z]+)\s*=/i);
+  assert.doesNotMatch(html, /\s(on[a-z]+)\s*=/i);
 });
 
 test('look and feel: only the design tokens, the system fonts and the type scale', () => {

@@ -405,6 +405,7 @@
     replace($('#allActions'), actionButtons(admin.actions, $('#ctlOut'), true));
     const dm = $('#demoForm');
     if (dm) {
+      dm.onsubmit = (e) => e.preventDefault();
       const cb = h('input', { type: 'checkbox', id: 'dm-on', role: 'switch', checked: !!(admin.demo && admin.demo.on) });
       cb.addEventListener('change', async () => { await post('api/admin/demo', { on: cb.checked }); await loadAdmin(); poll(); });
       replace(dm, h('h3', { text: 'Demo data' }), h('p', { class: 'hint', text: 'Show realistic sample data on every screen, for trying the dashboard before its connections are set up. Turns off by itself once they are, unless you switch it here.' }), h('div', { class: 'field toggle' }, h('label', { for: 'dm-on', text: 'Show demo data' }), cb));
