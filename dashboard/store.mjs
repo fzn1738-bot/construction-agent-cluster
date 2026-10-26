@@ -43,6 +43,7 @@ export function panes() {
   return (Array.isArray(SPEC.panes) ? SPEC.panes : []).filter((p) => p && p.id).map((p) => ({
     id: String(p.id), title: String(p.title || p.id), summary: String(p.summary || ''), feature: p.feature || null,
     metrics: p.metrics || [], panels: p.panels || [], actions: p.actions || [],
+    layout: ['grid', 'focus', 'split'].includes(p.layout) ? p.layout : 'grid',
     clientVisible: vis[p.id] ? vis[p.id].clientVisible !== false : p.client !== false
   }));
 }
@@ -53,10 +54,16 @@ export const settingsSchema = () => (Array.isArray(SPEC.settings) ? SPEC.setting
   key: String(s.key), label: String(s.label || s.key), type: ['text', 'number', 'toggle', 'select', 'secret', 'textarea'].includes(s.type) ? s.type : 'text',
   options: Array.isArray(s.options) ? s.options.map(String) : [], help: String(s.help || ''), default: s.default ?? (s.type === 'toggle' ? false : s.type === 'number' ? 0 : ''), group: String(s.group || 'General')
 }));
+// A setting left empty falls back to an environment variable of the same name in capitals (youtube_api_key ->
+// YOUTUBE_API_KEY), so keys already in a .env keep working; anything saved in Settings wins.
+const envOf = (k) => process.env[String(k).toUpperCase().replace(/[^A-Z0-9_]/g, '_')];
 export function getSettings() {
   const saved = readJSON('settings.json', {});
   const out = {};
-  for (const s of settingsSchema()) out[s.key] = saved[s.key] !== undefined ? saved[s.key] : s.default;
+  for (const s of settingsSchema()) {
+    const v = saved[s.key] !== undefined && saved[s.key] !== '' ? saved[s.key] : undefined;
+    out[s.key] = v !== undefined ? v : ((s.type === 'secret' || s.type === 'text') && envOf(s.key)) || s.default;
+  }
   for (const [k, v] of Object.entries(saved)) if (!(k in out)) out[k] = v;
   return out;
 }
@@ -66,6 +73,10 @@ export function saveSettings(values) {
   for (const s of settingsSchema()) {
     if (!(s.key in values)) continue;
     let v = values[s.key];
+    if (v === null) {
+      if (cur[s.key] !== undefined) { delete cur[s.key]; changed.push(s.key); }
+      continue;
+    }
     if (s.type === 'secret' && (v === '' || v === '••••••')) continue;   // left blank: keep the saved secret
     if (s.type === 'number') { v = Number(v); if (!Number.isFinite(v)) continue; }
     else if (s.type === 'toggle') v = v === true || v === 'true' || v === 'on' || v === 1;
@@ -76,6 +87,7 @@ export function saveSettings(values) {
   writeJSON('settings.json', cur);
   return changed;
 }
+export const settingSource = (key) => { const saved = readJSON('settings.json', {}); return saved[key] !== undefined && saved[key] !== '' ? 'settings' : envOf(key) ? 'env' : null; };
 export const maskedSettings = () => { const v = getSettings(); for (const s of settingsSchema()) if (s.type === 'secret' && v[s.key]) v[s.key] = '••••••'; return v; };
 
 // ---------- users and access ----------
@@ -136,3 +148,36 @@ export function allowedPanes(user) {
 export const maintenance = () => readJSON('maintenance.json', { on: false, message: '' });
 export function setMaintenance(on, message = '') { writeJSON('maintenance.json', { on: !!on, message: String(message || '').slice(0, 300), at: new Date().toISOString() }); }
 export function audit(who, what) { appendLine('audit.jsonl', { at: new Date().toISOString(), who: who ? who.name + ' (' + who.role + ')' : 'system', what: String(what).slice(0, 300) }); }
+
+// ---------- connections ----------
+// The outside services the solution needs (dashboard.json "connections"): each names the settings that hold its
+// keys or logins. A connection is ready when every required setting has a value; the admin can test it.
+export const connectionsSpec = () => (Array.isArray(SPEC.connections) ? SPEC.connections : []).filter((c) => c && c.id).map((c) => ({
+  id: String(c.id), name: String(c.name || c.id), summary: String(c.summary || ''), docs: String(c.docs || ''), required: c.required !== false,
+  fields: (Array.isArray(c.fields) ? c.fields : []).map(String), optional: (Array.isArray(c.optional) ? c.optional : []).map(String)
+}));
+export function connections() {
+  const v = getSettings();
+  const tests = readJSON('connections.json', {});
+  return connectionsSpec().map((c) => {
+    const missing = c.fields.filter((k) => v[k] === undefined || v[k] === '' || v[k] === null);
+    return { ...c, ready: !missing.length, missing, from: c.fields.map((k) => ({ key: k, source: settingSource(k) })), test: tests[c.id] || null };
+  });
+}
+export function saveConnectionTest(id, r) { const t = readJSON('connections.json', {}); t[id] = { ok: !!r.ok, message: String(r.message || '').slice(0, 300), at: new Date().toISOString() }; writeJSON('connections.json', t); return t[id]; }
+export function connectionSummary() {
+  const all = connections();
+  const req = all.filter((c) => c.required);
+  return { total: all.length, ready: all.filter((c) => c.ready).length, requiredReady: req.every((c) => c.ready), missing: all.filter((c) => !c.ready).map((c) => c.name) };
+}
+
+// ---------- demo data ----------
+// Until the required connections are set up, the dashboard shows the solution's demo data (dashboard/demo.mjs) so
+// every pane can be tried. The admin can switch it on or off in Control; the choice sticks.
+export function demoOn() {
+  const d = readJSON('demo.json', null);
+  if (d && typeof d.on === 'boolean') return d.on;
+  if (SPEC.demo === false || !fs.existsSync(path.join(HERE, 'demo.mjs'))) return false;   // no demo data written: real hooks
+  return connectionsSpec().length ? !connectionSummary().requiredReady : false;
+}
+export function setDemo(on) { writeJSON('demo.json', { on: !!on, at: new Date().toISOString() }); }

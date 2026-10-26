@@ -1,331 +1,512 @@
 {
-  "title": "Construction Agent Dashboard",
-  "tagline": "Is the agent alive and keeping up?",
+  "title": "Construction Agent",
+  "tagline": "Site documents filed, contractor files mirrored, the project inbox triaged, every action on record.",
   "orb": {
     "headline": "Healthy",
-    "metric": "Active Tasks",
-    "value": "0",
-    "detail": "System is running smoothly"
+    "metric": "Success rate",
+    "value": "98%",
+    "detail": ""
   },
   "ring": [
     {
-      "label": "Polling Folders",
-      "sample": "2"
+      "label": "Runs today",
+      "sample": "24"
     },
     {
-      "label": "FTP Transfers",
-      "sample": "0"
+      "label": "Success",
+      "sample": "98%"
     },
     {
-      "label": "Emails Processed",
-      "sample": "0"
+      "label": "Last run",
+      "sample": "2m"
     }
   ],
   "metrics": [
     {
-      "key": "activeTasks",
-      "label": "Active Tasks",
-      "unit": "count",
-      "good": "down"
+      "key": "runs",
+      "label": "Runs today",
+      "unit": "",
+      "good": "up"
     },
     {
-      "key": "syncRate",
-      "label": "Sync Rate",
+      "key": "success",
+      "label": "Success rate",
       "unit": "%",
       "good": "up"
     },
     {
-      "key": "avgRunMs",
-      "label": "Avg Run Time",
-      "unit": "ms",
+      "key": "errors",
+      "label": "Errors",
+      "unit": "",
       "good": "down"
     },
     {
-      "key": "folderQueue",
-      "label": "Files Waiting",
-      "unit": "count",
+      "key": "activeTasks",
+      "label": "Working now",
+      "unit": "",
       "good": "down"
     },
     {
-      "key": "folderEvents",
-      "label": "Folder Events",
-      "unit": "count",
+      "key": "docsFiled",
+      "label": "Documents filed",
+      "unit": "",
       "good": "up"
     },
     {
+      "key": "docsWaiting",
+      "label": "Files waiting",
+      "unit": "",
+      "good": "down"
+    },
+    {
       "key": "ftpTransfers",
-      "label": "FTP Transfers",
-      "unit": "count",
+      "label": "Files transferred",
+      "unit": "",
       "good": "up"
     },
     {
       "key": "ftpFailed",
-      "label": "FTP Failures",
-      "unit": "count",
+      "label": "Transfer failures",
+      "unit": "",
       "good": "down"
     },
     {
       "key": "emailsProcessed",
-      "label": "Emails Processed",
-      "unit": "count",
+      "label": "Emails triaged",
+      "unit": "",
       "good": "up"
     },
     {
       "key": "emailBacklog",
-      "label": "Email Backlog",
-      "unit": "count",
+      "label": "Inbox backlog",
+      "unit": "",
       "good": "down"
     },
     {
-      "key": "stateRows",
-      "label": "Log Rows",
-      "unit": "count",
+      "key": "logRows",
+      "label": "Events on record",
+      "unit": "",
       "good": "up"
     },
     {
-      "key": "stateHealth",
-      "label": "Database Integrity",
+      "key": "dbIntegrity",
+      "label": "Record integrity",
       "unit": "%",
       "good": "up"
-    },
-    {
-      "key": "staleMonitors",
-      "label": "Stale Monitors",
-      "unit": "count",
-      "good": "down"
     }
   ],
   "panels": [
     {
-      "title": "Recent Runs",
-      "kind": "table",
+      "title": "Activity",
+      "kind": "line",
       "fields": [
-        "Task",
-        "Status",
-        "Time"
+        "Runs"
       ]
     },
     {
-      "title": "System Logs",
-      "kind": "list",
+      "title": "Arrivals, last 24 hours",
+      "kind": "line",
       "fields": [
-        "Timestamp",
-        "Level",
-        "Message"
+        "Files"
       ]
     },
     {
-      "title": "Monitors",
+      "title": "Recent arrivals",
       "kind": "table",
       "fields": [
-        "Monitor",
-        "State",
-        "Last run",
-        "Queue"
-      ]
-    },
-    {
-      "title": "Folder Activity",
-      "kind": "table",
-      "fields": [
+        "File",
         "Folder",
         "Event",
-        "File",
-        "Time"
+        "When"
       ]
     },
     {
-      "title": "FTP Activity",
-      "kind": "table",
+      "title": "Transfers, last 24 hours",
+      "kind": "line",
       "fields": [
-        "Site",
-        "Operation",
-        "File",
-        "Status",
-        "Time"
+        "Transfers"
       ]
     },
     {
-      "title": "Email Activity",
+      "title": "Transfer history",
       "kind": "table",
       "fields": [
-        "Mailbox",
+        "File",
+        "Direction",
+        "Result",
+        "When"
+      ]
+    },
+    {
+      "title": "Triage by rule",
+      "kind": "bar",
+      "fields": [
+        "Messages"
+      ]
+    },
+    {
+      "title": "Recent messages",
+      "kind": "table",
+      "fields": [
+        "From",
         "Subject",
         "Result",
-        "Time"
+        "When"
       ]
     },
     {
-      "title": "State Tables",
+      "title": "Events by source",
+      "kind": "bar",
+      "fields": [
+        "Events"
+      ]
+    },
+    {
+      "title": "Latest events",
       "kind": "table",
       "fields": [
-        "Table",
-        "Rows"
+        "Source",
+        "Result",
+        "What",
+        "When"
       ]
     }
   ],
   "actions": [
     {
       "id": "run",
-      "label": "Run Now",
-      "description": "Manually trigger all scheduled tasks",
-      "input": null
-    },
-    {
-      "id": "run-folders",
-      "label": "Poll folders now",
-      "description": "Poll every watched folder once",
-      "input": null
-    },
-    {
-      "id": "run-ftp",
-      "label": "Sync FTP now",
-      "description": "Run every FTP sync once",
-      "input": null
-    },
-    {
-      "id": "run-imap",
-      "label": "Check email now",
-      "description": "Poll every mailbox once",
-      "input": null
-    },
-    {
-      "id": "run-monitor",
-      "label": "Run one monitor",
-      "description": "Run a single monitor by id, e.g. folder:drawings",
-      "input": {
-        "label": "Monitor id",
-        "placeholder": "folder:drawings"
-      },
+      "label": "Run every outcome now",
+      "description": "Scan the site folder, sync FTP and check the inbox once, for every outcome that is set up",
+      "input": null,
       "adminOnly": true
     },
     {
-      "id": "check-state",
-      "label": "Check database",
-      "description": "Run the SQLite integrity check",
+      "id": "scan-folders",
+      "label": "Scan site folders",
+      "description": "Look for new drawings and documents now",
+      "input": null
+    },
+    {
+      "id": "sync-ftp",
+      "label": "Sync FTP now",
+      "description": "Mirror files with the contractor FTP server now",
+      "input": null
+    },
+    {
+      "id": "check-inbox",
+      "label": "Check inbox now",
+      "description": "Triage new project emails now",
+      "input": null
+    },
+    {
+      "id": "check-database",
+      "label": "Check the record",
+      "description": "Verify the activity record is intact",
       "input": null
     }
   ],
-  "reports": [
-    "Task History",
-    "Sync Performance"
-  ],
+  "reports": [],
   "panes": [
     {
-      "id": "loop",
-      "title": "Continuous Loop",
-      "summary": "The scheduler: runs, success rate and run times",
-      "feature": "F1",
-      "metrics": [
-        "activeTasks",
-        "syncRate",
-        "avgRunMs",
-        "staleMonitors"
-      ],
-      "panels": [
-        "Recent Runs",
-        "Monitors",
-        "System Logs"
-      ],
-      "actions": [
-        "run",
-        "run-monitor"
-      ],
-      "client": true
-    },
-    {
-      "id": "folders",
-      "title": "Local Folder Polling",
-      "summary": "Watched folders, files waiting and what was handled",
+      "id": "documents",
+      "title": "Site documents",
+      "summary": "Drawings and documents filed the moment they land in the watched site folder.",
       "feature": "F2",
       "metrics": [
-        "folderQueue",
-        "folderEvents"
+        "docsFiled",
+        "docsWaiting"
       ],
       "panels": [
-        "Folder Activity"
+        "Arrivals, last 24 hours",
+        "Recent arrivals"
       ],
       "actions": [
-        "run-folders"
+        "scan-folders"
       ],
-      "client": true
+      "client": true,
+      "layout": "split",
+      "columns": [
+        "File",
+        "Folder",
+        "Event",
+        "When"
+      ],
+      "recordsTitle": "Arrivals"
     },
     {
-      "id": "ftp",
-      "title": "FTP Client Sync",
-      "summary": "Uploads and downloads against remote sites",
-      "feature": "F3",
+      "id": "transfers",
+      "title": "Contractor file transfers",
+      "summary": "Files mirrored between site and the contractor's FTP server, with every failure shown.",
+      "feature": "F2",
       "metrics": [
         "ftpTransfers",
         "ftpFailed"
       ],
       "panels": [
-        "FTP Activity"
+        "Transfers, last 24 hours",
+        "Transfer history"
       ],
       "actions": [
-        "run-ftp"
+        "sync-ftp"
       ],
-      "client": true
+      "client": true,
+      "layout": "focus",
+      "columns": [
+        "File",
+        "Direction",
+        "Result",
+        "When"
+      ],
+      "recordsTitle": "Transfers"
     },
     {
-      "id": "email",
-      "title": "IMAP Email Polling",
-      "summary": "Mailboxes, processed emails and backlog",
-      "feature": "F4",
+      "id": "inbox",
+      "title": "Project inbox",
+      "summary": "RFIs and invoices picked out of the project mailbox by your triage rules.",
+      "feature": "F2",
       "metrics": [
         "emailsProcessed",
         "emailBacklog"
       ],
       "panels": [
-        "Email Activity"
+        "Triage by rule",
+        "Recent messages"
       ],
       "actions": [
-        "run-imap"
+        "check-inbox"
       ],
-      "client": true
+      "client": true,
+      "layout": "split",
+      "columns": [
+        "From",
+        "Subject",
+        "Result",
+        "When"
+      ],
+      "recordsTitle": "Messages"
     },
     {
-      "id": "state",
-      "title": "SQLite State",
-      "summary": "Persisted state, row counts and integrity",
-      "feature": "F4",
+      "id": "activity-log",
+      "title": "Activity record",
+      "summary": "A permanent, filterable record of everything the agent has done, exportable on demand.",
+      "feature": "F2",
       "metrics": [
-        "stateRows",
-        "stateHealth"
+        "logRows",
+        "dbIntegrity"
       ],
       "panels": [
-        "State Tables"
+        "Events by source",
+        "Latest events"
       ],
       "actions": [
-        "check-state"
+        "check-database"
       ],
-      "client": true
+      "client": true,
+      "layout": "grid",
+      "columns": [
+        "Source",
+        "Result",
+        "What",
+        "When"
+      ],
+      "recordsTitle": "Events"
     }
   ],
   "settings": [
     {
+      "key": "watch_folder",
+      "label": "Watched site folder",
+      "type": "text",
+      "group": "Site folder",
+      "help": "Absolute path of the folder where site documents arrive."
+    },
+    {
+      "key": "ftp_host",
+      "label": "FTP host",
+      "type": "text",
+      "group": "Contractor FTP",
+      "help": "e.g. ftp.contractor.example"
+    },
+    {
+      "key": "ftp_port",
+      "label": "FTP port",
+      "type": "number",
+      "default": 21,
+      "group": "Contractor FTP"
+    },
+    {
+      "key": "ftp_user",
+      "label": "FTP user",
+      "type": "text",
+      "group": "Contractor FTP"
+    },
+    {
+      "key": "ftp_password",
+      "label": "FTP password",
+      "type": "secret",
+      "group": "Contractor FTP"
+    },
+    {
+      "key": "ftp_secure",
+      "label": "FTP security",
+      "type": "select",
+      "options": [
+        "none",
+        "explicit",
+        "implicit"
+      ],
+      "default": "explicit",
+      "group": "Contractor FTP"
+    },
+    {
+      "key": "ftp_remote_dir",
+      "label": "FTP remote folder",
+      "type": "text",
+      "default": "/",
+      "group": "Contractor FTP"
+    },
+    {
+      "key": "ftp_local_dir",
+      "label": "Local mirror folder",
+      "type": "text",
+      "group": "Contractor FTP",
+      "help": "Where mirrored files are kept. Leave empty to use the dashboard data folder."
+    },
+    {
+      "key": "ftp_direction",
+      "label": "Sync direction",
+      "type": "select",
+      "options": [
+        "download",
+        "upload",
+        "both"
+      ],
+      "default": "download",
+      "group": "Contractor FTP"
+    },
+    {
+      "key": "imap_host",
+      "label": "Mailbox host (IMAP)",
+      "type": "text",
+      "group": "Project mailbox",
+      "help": "e.g. imap.example.com"
+    },
+    {
+      "key": "imap_port",
+      "label": "Mailbox port",
+      "type": "number",
+      "default": 993,
+      "group": "Project mailbox"
+    },
+    {
+      "key": "imap_user",
+      "label": "Mailbox user",
+      "type": "text",
+      "group": "Project mailbox"
+    },
+    {
+      "key": "imap_password",
+      "label": "Mailbox password",
+      "type": "secret",
+      "group": "Project mailbox"
+    },
+    {
+      "key": "imap_secure",
+      "label": "Use TLS",
+      "type": "toggle",
+      "default": true,
+      "group": "Project mailbox"
+    },
+    {
+      "key": "imap_mailbox",
+      "label": "Mailbox folder",
+      "type": "text",
+      "default": "INBOX",
+      "group": "Project mailbox"
+    },
+    {
+      "key": "imap_rules",
+      "label": "Triage rules",
+      "type": "textarea",
+      "group": "Project mailbox",
+      "help": "One rule per line as name: subject keyword, e.g. rfi: RFI"
+    },
+    {
       "key": "staleAfterMin",
-      "label": "Stale after (minutes)",
+      "label": "Flag a monitor as stale after (min)",
       "type": "number",
       "default": 30,
-      "help": "A monitor with no run for this long counts as stale.",
       "group": "Monitoring"
     },
     {
       "key": "recentRows",
-      "label": "Rows per activity panel",
+      "label": "Rows shown in recent lists",
       "type": "number",
       "default": 12,
-      "help": "How many recent entries each panel lists.",
       "group": "Monitoring"
     },
     {
       "key": "successTarget",
-      "label": "Sync rate target (%)",
+      "label": "Sync success target (%)",
       "type": "number",
       "default": 90,
-      "help": "The orb turns amber below this success rate.",
       "group": "Monitoring"
+    },
+    {
+      "key": "latencyWarnMs",
+      "label": "Flag a service as slow above (ms)",
+      "type": "number",
+      "default": 1500,
+      "group": "Monitoring"
+    }
+  ],
+  "connections": [
+    {
+      "id": "folders",
+      "name": "Site folder",
+      "summary": "The local folder the agent watches for new site documents.",
+      "docs": "",
+      "required": true,
+      "fields": [
+        "watch_folder"
+      ]
+    },
+    {
+      "id": "ftp",
+      "name": "Contractor FTP server",
+      "summary": "FTP or FTPS server mirrored with the site.",
+      "docs": "https://www.rfc-editor.org/rfc/rfc959",
+      "required": true,
+      "fields": [
+        "ftp_host",
+        "ftp_user",
+        "ftp_password"
+      ],
+      "optional": [
+        "ftp_port",
+        "ftp_secure",
+        "ftp_remote_dir",
+        "ftp_local_dir",
+        "ftp_direction"
+      ]
+    },
+    {
+      "id": "imap",
+      "name": "Project mailbox (IMAP)",
+      "summary": "The inbox the agent triages for RFIs and invoices.",
+      "docs": "https://www.rfc-editor.org/rfc/rfc9051",
+      "required": true,
+      "fields": [
+        "imap_host",
+        "imap_user",
+        "imap_password"
+      ],
+      "optional": [
+        "imap_port",
+        "imap_secure",
+        "imap_mailbox",
+        "imap_rules"
+      ]
     }
   ],
   "repo": "construction-agent-cluster",

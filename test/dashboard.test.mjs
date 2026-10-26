@@ -40,6 +40,25 @@ test('dashboard serves its page, admin and client portals, and keeps clients to 
     assert.ok(cs.metrics.concat(cs.panels).every((x) => x.pane === 'overview' || (first && x.pane === first.id)), 'client data stays inside their panes');
     assert.equal((await get('/api/admin/state', client)).status, 403, 'clients cannot open admin');
     if (cs.actions.length) assert.equal((await post('/api/run', { action: cs.actions[0].id }, client)).status, 403, 'view-only clients cannot run');
+    if (first) {
+      assert.equal((await get('/api/pane/' + first.id, client)).status, 200, 'a client opens their own pane screen');
+      const other = s.panes.find((p) => p.id !== first.id);
+      if (other) assert.equal((await get('/api/pane/' + other.id, client)).status, 404, 'and never another pane');
+      assert.equal((await post('/api/pane/' + first.id + '/do', { action: 'x' }, client)).status, 403, 'view-only clients cannot use pane buttons');
+    }
+    // every pane screen and the Overview centrepiece the solution ships must load
+    for (const p of s.panes.filter((x) => x.view)) {
+      const r = await fetch(base + '/' + p.view);
+      assert.equal(r.status, 200, p.view + ' is served');
+      assert.match(await r.text(), /export\s+(async\s+)?function\s+render|export\s*\{[^}]*render/, p.view + ' exports render()');
+    }
+    if (s.app.hero) assert.equal((await fetch(base + '/' + s.app.hero)).status, 200, 'hero.js is served');
+    // connections: the admin sees each one and can test it
+    for (const c of st.connections || []) {
+      const t = await (await post('/api/admin/connections', { id: c.id })).json();
+      assert.ok(t.ok && t.test && typeof t.test.ok === 'boolean', 'connection ' + c.id + ' can be tested');
+    }
+    assert.equal((await post('/api/admin/connections', { id: 'x' }, client)).status, 403, 'clients cannot see connections');
     await post('/api/admin/users', { action: 'remove', id: add.user.id });
     assert.equal((await get('/api/summary', client)).status, 401, 'removed clients are signed out');
   } finally { srv.close(); }

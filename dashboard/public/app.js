@@ -15,6 +15,8 @@
   const s = (tag, attrs = {}) => { const el = document.createElementNS(NS, tag); for (const [k, v] of Object.entries(attrs)) el.setAttribute(k, String(v)); return el; };
   const replace = (el, ...kids) => el.replaceChildren(...kids.flat().filter((k) => k != null && k !== false));
   const fmt = (v) => (typeof v === 'number' ? (Math.abs(v) >= 1000 ? new Intl.NumberFormat(undefined, { notation: 'compact', maximumFractionDigits: 1 }).format(v) : String(Math.round(v * 10) / 10)) : String(v ?? '–'));
+  // a unit of "count" or "items" adds nothing next to a number
+  const unitOf = (u) => (/^(counts?|#|n|num|number|items?|qty|x)$/i.test(String(u || '').trim()) ? '' : String(u || ''));
   const ago = (iso) => { const m = Math.round((Date.now() - Date.parse(iso)) / 60000); return isNaN(m) ? '' : m < 1 ? 'just now' : m < 60 ? m + ' min ago' : m < 1440 ? Math.round(m / 60) + ' h ago' : Math.round(m / 1440) + ' d ago'; };
   // the page may run sandboxed (no storage): every read and write is optional
   const mem = {};
@@ -35,7 +37,9 @@
   // ---------- access key ----------
   let KEY = '';
   const hashKey = location.hash.match(/[#&]key=([^&]+)/);
-  if (hashKey) { KEY = decodeURIComponent(hashKey[1]); session.set('app-key', KEY); try { history.replaceState(null, '', location.pathname + location.search + '#/overview'); } catch { location.hash = '#/overview'; } }
+  // #key=…&go=pane/<id> signs in and opens that view (HQ uses it to screenshot each pane)
+  const goTo = (location.hash.match(/[#&]go=([\w\/-]+)/) || [])[1] || 'overview';
+  if (hashKey) { KEY = decodeURIComponent(hashKey[1]); session.set('app-key', KEY); try { history.replaceState(null, '', location.pathname + location.search + '#/' + goTo); } catch { location.hash = '#/' + goTo; } }
   else KEY = session.get('app-key') || '';
   async function api(path, opts = {}) {
     const r = await fetch(path, { cache: 'no-store', ...opts, headers: { 'Content-Type': 'text/plain', 'x-app-key': KEY, ...(opts.headers || {}) } });
@@ -52,6 +56,7 @@
     KEY = $('#code').value.trim(); session.set('app-key', KEY);
     try { await api('api/me'); $('#gate').hidden = true; $('#shell').hidden = false; $('#code').value = ''; poll(true); } catch {}
   });
+  $('#demoForm').addEventListener('submit', (e) => e.preventDefault());
   $('#signOut').addEventListener('click', () => { KEY = ''; session.del('app-key'); last = null; showGate(); });
 
   // ---------- sidebar ----------
@@ -61,7 +66,7 @@
   scrim.addEventListener('click', () => setMenu(false));
   document.addEventListener('keydown', (e) => { if (e.key === 'Escape') setMenu(false); });
 
-  const ICON = { overview: 'M4 13h6V4H4zm10 7h6v-9h-6zM4 20h6v-5H4zm10-11h6V4h-6z', pane: 'M5 5h14v14H5z', reports: 'M7 3h7l5 5v13H7zM14 3v5h5', feedback: 'M4 5h16v11H8l-4 4z', settings: 'M12 9a3 3 0 1 0 0 6 3 3 0 0 0 0-6zm8 3-2-1 .5-2.2-2.3-.4L15 6l-2 1-1-2-1 2-2-1-1.2 2.4-2.3.4L6 11l-2 1 2 1-.5 2.2 2.3.4L9 18l2-1 1 2 1-2 2 1 1.2-2.4 2.3-.4L18 13z', users: 'M9 11a3 3 0 1 0 0-6 3 3 0 0 0 0 6zm-6 9a6 6 0 0 1 12 0M16 11a3 3 0 1 0 0-6M21 20a6 6 0 0 0-4-5.6', activity: 'M3 12h4l3 7 4-14 3 7h4', control: 'M12 3v9M6.3 6.3a8 8 0 1 0 11.4 0' };
+  const ICON = { overview: 'M4 13h6V4H4zm10 7h6v-9h-6zM4 20h6v-5H4zm10-11h6V4h-6z', pane: 'M5 5h14v14H5z', reports: 'M7 3h7l5 5v13H7zM14 3v5h5', feedback: 'M4 5h16v11H8l-4 4z', settings: 'M12 9a3 3 0 1 0 0 6 3 3 0 0 0 0-6zm8 3-2-1 .5-2.2-2.3-.4L15 6l-2 1-1-2-1 2-2-1-1.2 2.4-2.3.4L6 11l-2 1 2 1-.5 2.2 2.3.4L9 18l2-1 1 2 1-2 2 1 1.2-2.4 2.3-.4L18 13z', users: 'M9 11a3 3 0 1 0 0-6 3 3 0 0 0 0 6zm-6 9a6 6 0 0 1 12 0M16 11a3 3 0 1 0 0-6M21 20a6 6 0 0 0-4-5.6', activity: 'M3 12h4l3 7 4-14 3 7h4', control: 'M12 3v9M6.3 6.3a8 8 0 1 0 11.4 0', connections: 'M9 7V3M15 7V3M7 7h10v4a5 5 0 0 1-10 0zM12 16v5' };
   const icon = (k) => { const v = s('svg', { viewBox: '0 0 24 24', 'aria-hidden': 'true' }); v.append(s('path', { d: ICON[k] || ICON.pane })); return v; };
   function renderNav(d) {
     const item = (route, label, ic, sub) => h('a', { href: '#/' + route, class: 'nav-i', 'data-route': route, title: sub || null }, ic === 'pane' ? h('i', { class: 'nav-b', 'aria-hidden': 'true', text: (label.match(/[A-Za-z0-9]/) || ['•'])[0].toUpperCase() }) : icon(ic), h('span', { text: label }));
@@ -69,7 +74,7 @@
       h('div', { class: 'nav-g' }, item('overview', 'Overview', 'overview')),
       (d.panes || []).length ? h('div', { class: 'nav-g' }, h('p', { class: 'nav-h', text: d.me.role === 'admin' ? 'Features and services' : 'Your services' }), d.panes.map((p) => item('pane/' + p.id, p.title, 'pane', p.summary))) : null,
       h('div', { class: 'nav-g' }, item('reports', 'Reports', 'reports'), item('feedback', 'Feedback', 'feedback')),
-      d.me.role === 'admin' ? h('div', { class: 'nav-g admin' }, h('p', { class: 'nav-h', text: 'Admin' }), item('admin/settings', 'Settings', 'settings'), item('admin/users', 'Users & access', 'users'), item('admin/activity', 'Activity', 'activity'), item('admin/control', 'Control', 'control')) : null
+      d.me.role === 'admin' ? h('div', { class: 'nav-g admin' }, h('p', { class: 'nav-h', text: 'Admin' }), item('admin/settings', 'Settings', 'settings'), (d.connections && d.connections.total ? item('admin/connections', 'Connections' + (d.connections.ready < d.connections.total ? ' (' + (d.connections.total - d.connections.ready) + ' to set up)' : ''), 'connections') : null), item('admin/users', 'Users & access', 'users'), item('admin/activity', 'Activity', 'activity'), item('admin/control', 'Control', 'control')) : null
     ];
     replace($('#nav'), groups);
     $('#whoName').textContent = d.me.name; $('#whoRole').textContent = d.me.role === 'admin' ? 'Admin' : 'Client';
@@ -129,7 +134,7 @@
     const t = (m.trend || []).filter((x) => typeof x === 'number');
     const delta = t.length > 1 ? t[t.length - 1] - t[0] : null;
     const good = delta == null ? null : (m.good === 'down' ? delta <= 0 : delta >= 0);
-    return h('div', { class: 'tile' }, h('div', { class: 'l', text: m.label }), h('div', { class: 'v' }, fmt(m.value), m.unit ? h('small', { text: m.unit }) : null), spark(t),
+    return h('div', { class: 'tile' }, h('div', { class: 'l', text: m.label }), h('div', { class: 'v' }, fmt(m.value), unitOf(m.unit) ? h('small', { text: unitOf(m.unit) }) : null), spark(t),
       delta == null ? null : h('div', { class: 'd ' + (good ? 'good' : 'bad'), text: (delta >= 0 ? '▲ ' : '▼ ') + fmt(Math.abs(delta)) + ' over the period' }));
   }
   async function runAction(a, btn, input, out) {
@@ -164,13 +169,45 @@
   let last = null, admin = null;
   const sig = {};
   const once = (key, data, fn) => { const k = JSON.stringify(data); if (sig[key] !== k) { sig[key] = k; fn(); } };
-  const VIEWS = ['overview', 'pane', 'reports', 'feedback', 'settings', 'users', 'activity', 'control'];
+  const VIEWS = ['overview', 'pane', 'reports', 'feedback', 'settings', 'connections', 'users', 'activity', 'control'];
+  // ---------- the solution's own screens ----------
+  // public/panes/<id>.js gives a pane its own screen; public/hero.js gives Overview its own centrepiece.
+  // Each is an ES module: export function render(root, ctx) and, optionally, update(root, ctx) on every refresh.
+  const mods = {};
+  const loadMod = (rel) => (mods[rel] = mods[rel] || import(new URL(rel, document.baseURI).href).catch((e) => ({ __error: e })));
+  const kit = { h, s, fmt, ago, table, panel, tile, chart, spark, unitOf };
+  const mount = { pane: null, hero: null };
+  function screenError(root, what, e) { replace(root, h('div', { class: 'card' }, h('h3', { text: what + ' could not load' }), h('p', { class: 'empty', text: String(e && e.message || e) }))); }
   function show(v, title, sub = '') {
     for (const x of VIEWS) $('#v-' + x).hidden = x !== v;
     $('#pageTitle').textContent = title; $('#pageSub').textContent = sub;
     document.title = title + ' · ' + ((last && last.app.name) || 'Dashboard');
   }
+  function heroCtx(d) { return { ...kit, app: d.app, me: d.me, status: d.status || {}, metrics: d.metrics || [], panels: d.panels || [], panes: d.panes || [], health: d.health || {}, runs: d.runs || [], connections: d.connections || {}, demo: !!d.app.demo, theme, go: (r) => { location.hash = '#/' + r; } }; }
+  async function renderHero(d) {
+    const root = $('#hero');
+    if (!d.app.hero) { root.hidden = true; $('#orb').hidden = false; return false; }
+    root.hidden = false; $('#orb').hidden = true;
+    const ctx = heroCtx(d);
+    if (mount.hero) { try { if (mount.hero.update) mount.hero.update(root, ctx); } catch {} return true; }
+    const m = await loadMod(d.app.hero);
+    if (m.__error || typeof m.render !== 'function') { root.hidden = true; $('#orb').hidden = false; mount.hero = { update: null }; return false; }
+    try { await m.render(root, ctx); mount.hero = m; } catch (e) { screenError(root, 'Overview', e); mount.hero = { update: null }; }
+    return true;
+  }
+  function renderSetup(d) {
+    const c = d.connections || {}, el = $('#setup');
+    const need = d.me.role === 'admin' && c.total && c.ready < c.total;
+    if (!need && !d.app.demo) { el.hidden = true; return; }
+    el.hidden = false;
+    replace(el, h('div', { class: 'setup-card' + (d.app.demo ? ' demo' : '') },
+      h('b', { text: d.app.demo ? 'Demo data' : 'Finish setting up' }),
+      h('span', { text: (d.app.demo ? 'What you see is realistic sample data so you can try every screen. ' : '') + (need ? c.ready + ' of ' + c.total + ' connections set up' + ((c.missing || []).length ? ': ' + c.missing.join(', ') + ' still need keys.' : '.') : d.me.role === 'admin' ? 'Turn demo data off in Control when you are ready.' : '') }),
+      need ? h('a', { class: 'btn primary', href: '#/admin/connections', text: 'Set up connections' }) : null));
+  }
   function renderOverview(d) {
+    renderHero(d);
+    renderSetup(d);
     const st = d.status || {};
     $('#coreCtx').textContent = st.detail || ''; $('#coreBig').textContent = st.headline || 'Ready';
     $('#coreVal').textContent = st.primary ? fmt(st.primary.value) : '–'; $('#coreCap').textContent = st.primary ? st.primary.label : '';
@@ -186,7 +223,9 @@
     once('tiles', d.metrics, () => replace($('#tiles'), (d.metrics || []).filter(here).map(tile)));
     once('services', [d.panes, d.metrics], () => replace($('#services'), (d.panes || []).length ? [h('h3', { class: 'sec-h', text: d.me.role === 'admin' ? 'Features and services' : 'Your services' }), h('div', { class: 'svc-grid' }, d.panes.map((p) => {
       const m = (d.metrics || []).find((x) => x.pane === p.id);
-      return h('a', { class: 'svc', href: '#/pane/' + p.id }, h('b', { text: p.title }), p.summary ? h('span', { text: p.summary }) : null, m ? h('em', {}, fmt(m.value), m.unit ? ' ' + m.unit : '', h('small', { text: ' ' + m.label })) : null, d.me.role === 'admin' && !p.clientVisible ? h('i', { class: 'chip', text: 'Hidden from clients' }) : null);
+      return h('a', { class: 'svc', href: '#/pane/' + p.id }, h('b', { text: p.title }), p.summary ? h('span', { text: p.summary }) : null, m ? h('em', {}, fmt(m.value), unitOf(m.unit) ? ' ' + unitOf(m.unit) : '', h('small', { text: ' ' + m.label })) : null,
+        p.state ? h('i', { class: 'chip state ' + (p.state.state || 'idle'), text: p.state.text || p.state.state }) : null,
+        d.me.role === 'admin' && !p.clientVisible ? h('i', { class: 'chip', text: 'Hidden from clients' }) : null);
     }))] : []));
     once('panels', d.panels, () => replace($('#panels'), (d.panels || []).filter(here).map(panel)));
     const hl = d.health || {};
@@ -195,15 +234,41 @@
     once('runs', d.runs, () => replace($('#runs'), runsTable(d.runs.slice(0, 8), d.me.role === 'admin')));
     once('reportsMini', d.reports, () => replace($('#reportsMini'), reportList(d.reports, 6)));
   }
+  function paneCtx(d, p) {
+    const mine = (x) => x.pane === p.id;
+    return { ...kit, pane: p, app: d.app, me: d.me, demo: !!d.app.demo, metrics: (d.metrics || []).filter(mine), panels: (d.panels || []).filter(mine), actions: (d.actions || []).filter(mine),
+      load: () => api('api/pane/' + p.id).then((r) => r.data), act: (action, input) => post('api/pane/' + p.id + '/do', { action, input }),
+      run: (action, input) => post('api/run', { action, input }), buttons: (list, out) => actionButtons(list, out, d.me.canRun), refresh: () => poll() };
+  }
+  async function renderCustomPane(d, p) {
+    const root = $('#paneCustom');
+    const generic = [$('#paneActions'), $('#paneTiles'), $('#panePanels'), $('#paneEmpty')];
+    if (!p.view) { root.hidden = true; if (mount.pane) { replace(root); mount.pane = null; } return false; }
+    root.hidden = false; generic.forEach((x) => { x.hidden = true; });
+    const ctx = paneCtx(d, p);
+    if (mount.pane && mount.pane.id === p.id) { try { if (mount.pane.mod.update) mount.pane.mod.update(root, ctx); } catch {} return true; }
+    const token = (mount.pane = { id: p.id, mod: {} });
+    replace(root, h('p', { class: 'empty', text: 'Loading ' + p.title + '…' }));
+    const m = await loadMod(p.view);
+    if (mount.pane !== token) return true;
+    if (m.__error || typeof m.render !== 'function') { screenError(root, p.title, m.__error || 'no render() in ' + p.view); return true; }
+    replace(root);
+    try { await m.render(root, ctx); token.mod = m; } catch (e) { screenError(root, p.title, e); }
+    return true;
+  }
   function renderPane(d, id) {
     const p = (d.panes || []).find((x) => x.id === id);
-    if (!p) { show('pane', 'Not available', 'This pane is not part of your access.'); replace($('#paneActions')); replace($('#paneTiles')); replace($('#panePanels')); $('#paneEmpty').hidden = true; return; }
+    if (!p) { show('pane', 'Not available', 'This pane is not part of your access.'); $('#paneCustom').hidden = true; mount.pane = null; replace($('#paneActions')); replace($('#paneTiles')); replace($('#panePanels')); $('#paneEmpty').hidden = true; return; }
     show('pane', p.title, p.summary);
+    if (p.view) { renderCustomPane(d, p); return; }
+    if (mount.pane) { replace($('#paneCustom')); $('#paneCustom').hidden = true; mount.pane = null; }
+    [$('#paneActions'), $('#paneTiles'), $('#panePanels')].forEach((x) => { x.hidden = false; });
     const mine = (x) => x.pane === id;
     const acts = (d.actions || []).filter(mine), mets = (d.metrics || []).filter(mine), pans = (d.panels || []).filter(mine);
     once('pane-a', [id, acts, d.me.canRun], () => replace($('#paneActions'), actionButtons(acts, $('#paneOut'), d.me.canRun)));
     once('pane-t', [id, mets], () => replace($('#paneTiles'), mets.map(tile)));
     once('pane-p', [id, pans], () => replace($('#panePanels'), pans.map(panel)));
+    $('#panePanels').dataset.layout = p.layout || 'grid';
     $('#paneEmpty').hidden = !!(acts.length || mets.length || pans.length);
     if (sig.paneId !== id) { sig.paneId = id; $('#paneOut').hidden = true; }
   }
@@ -221,16 +286,7 @@
     const msg = h('div', { class: 'runout', hidden: true, role: 'status' });
     if (!sc.length) return replace(f, h('h3', { text: 'Settings' }), h('p', { class: 'empty', text: 'This solution has no settings yet. The plan lists them in dashboard.json under "settings".' }));
     const groups = [...new Set(sc.map((x) => x.group))];
-    const field = (x) => {
-      const id = 'set-' + x.key;
-      let input;
-      if (x.type === 'toggle') input = h('input', { type: 'checkbox', id, name: x.key, checked: !!v[x.key], role: 'switch' });
-      else if (x.type === 'select') input = h('select', { id, name: x.key }, x.options.map((o) => h('option', { value: o, text: o, selected: String(v[x.key]) === o })));
-      else if (x.type === 'textarea') input = h('textarea', { id, name: x.key, text: v[x.key] ?? '' });
-      else input = h('input', { id, name: x.key, type: x.type === 'number' ? 'number' : x.type === 'secret' ? 'password' : 'text', value: v[x.key] ?? '', placeholder: x.type === 'secret' ? (v[x.key] ? 'Saved; type to replace' : 'Not set') : '', autocomplete: 'off' });
-      if (x.type === 'secret') input.value = '';
-      return h('div', { class: 'field' + (x.type === 'toggle' ? ' toggle' : '') }, h('label', { for: id, text: x.label }), input, x.help ? h('small', { text: x.help }) : null);
-    };
+    const field = (x) => settingField(x, v);
     replace(f, groups.map((g) => h('fieldset', {}, groups.length > 1 ? h('legend', { text: g }) : null, sc.filter((x) => x.group === g).map(field))), h('div', { class: 'row' }, h('button', { class: 'btn primary', type: 'submit', text: 'Save settings' })), msg);
     f.onsubmit = async (e) => {
       e.preventDefault();
@@ -239,6 +295,52 @@
       try { const r = await post('api/admin/settings', { values }); say(msg, r.changed.length ? 'Saved: ' + r.changed.length + ' change' + (r.changed.length > 1 ? 's' : '') + '.' : 'No changes to save.'); await loadAdmin(); }
       catch (err) { say(msg, err.message, false); }
     };
+  }
+  function settingField(x, v) {
+    const id = 'set-' + x.key;
+    let input;
+    if (x.type === 'toggle') input = h('input', { type: 'checkbox', id, name: x.key, checked: !!v[x.key], role: 'switch' });
+    else if (x.type === 'select') input = h('select', { id, name: x.key }, x.options.map((o) => h('option', { value: o, text: o, selected: String(v[x.key]) === o })));
+    else if (x.type === 'textarea') input = h('textarea', { id, name: x.key, text: v[x.key] ?? '' });
+    else input = h('input', { id, name: x.key, type: x.type === 'number' ? 'number' : x.type === 'secret' ? 'password' : 'text', value: x.type === 'secret' ? '' : (v[x.key] ?? ''), placeholder: x.type === 'secret' ? (v[x.key] ? 'Saved; type to replace' : 'Not set') : '', autocomplete: 'off' });
+    const clear = x.type === 'secret' && v[x.key] ? h('button', { class: 'linkbtn danger', type: 'button', text: 'Clear ' + x.label, onclick: async () => {
+      try {
+        await post('api/admin/settings', { values: { [x.key]: null } });
+        await loadAdmin();
+        renderConnections();
+        renderSettings();
+        poll();
+      } catch (err) { window.alert(err.message); }
+    } }) : null;
+    return h('div', { class: 'field' + (x.type === 'toggle' ? ' toggle' : '') }, h('label', { for: id, text: x.label }), input, clear, x.help ? h('small', { text: x.help }) : null);
+  }
+  function renderConnections() {
+    const list = admin.connections || [], sc = admin.settings.schema, v = admin.settings.values;
+    $('#connCount').textContent = list.filter((c) => c.ready).length + ' of ' + list.length + ' ready';
+    $('#connCount').className = 'chip' + (list.every((c) => c.ready) ? ' ok' : ' bad');
+    replace($('#connList'), list.length ? list.map((c) => {
+      const keys = c.fields.concat(c.optional || []);
+      const fields = keys.map((k) => sc.find((x) => x.key === k) || { key: k, label: k, type: 'secret', options: [], help: '' });
+      const out = h('div', { class: 'runout', hidden: true, role: 'status' });
+      const f = h('form', { class: 'form conn' + (c.ready ? ' ready' : '') },
+        h('div', { class: 'conn-head' }, h('b', { text: c.name }), h('span', { class: 'chip ' + (c.ready ? 'ok' : 'bad'), text: c.ready ? 'Ready' : 'Needs ' + c.missing.length + ' value' + (c.missing.length > 1 ? 's' : '') }),
+          c.test ? h('span', { class: 'chip ' + (c.test.ok ? 'ok' : 'bad'), text: (c.test.ok ? 'Test passed ' : 'Test failed ') + ago(c.test.at) }) : null),
+        c.summary ? h('p', { class: 'hint', text: c.summary }) : null,
+        fields.map((x) => { const el = settingField(x, v); const src = (c.from || []).find((y) => y.key === x.key); if (src && src.source === 'env') el.append(h('small', { text: 'Using the value from the solution\'s .env' })); return el; }),
+        c.docs ? h('p', { class: 'hint' }, 'Where to get these: ', h('a', { href: c.docs, target: '_blank', rel: 'noopener', text: c.docs })) : null,
+        h('div', { class: 'row' }, h('button', { class: 'btn primary', type: 'submit', text: 'Save' }), h('button', { class: 'btn', type: 'button', text: 'Test connection', onclick: async () => {
+          say(out, 'Testing ' + c.name + '…');
+          try { const r = await post('api/admin/connections', { id: c.id }); say(out, (r.test.ok ? '✓ ' : '✕ ') + (r.test.message || (r.test.ok ? 'Connected' : 'Failed')), r.test.ok); await loadAdmin(); }
+          catch (e) { say(out, e.message, false); }
+        } })), out);
+      f.onsubmit = async (e) => {
+        e.preventDefault();
+        const values = {};
+        for (const x of fields) { const el = f.elements[x.key]; if (el) values[x.key] = x.type === 'toggle' ? el.checked : el.value; }
+        try { const r = await post('api/admin/settings', { values }); say(out, r.changed.length ? 'Saved.' : 'No changes to save.'); await loadAdmin(); renderConnections(); poll(); } catch (err) { say(out, err.message, false); }
+      };
+      return f;
+    }) : h('p', { class: 'empty', text: 'This solution uses no outside services.' }));
   }
   function paneChecks(name, chosen) {
     const all = admin.panes;
@@ -301,6 +403,12 @@
       h('div', { class: 'row' }, h('button', { class: 'btn primary', type: 'submit', text: 'Save' })), msg);
     f.onsubmit = async (e) => { e.preventDefault(); try { await post('api/admin/maintenance', { on: f.elements.on.checked, message: f.elements.message.value }); await loadAdmin(); renderControl(); say($('#maintForm').querySelector('.runout'), 'Saved.'); } catch (err) { say(msg, err.message, false); } };
     replace($('#allActions'), actionButtons(admin.actions, $('#ctlOut'), true));
+    const dm = $('#demoForm');
+    if (dm) {
+      const cb = h('input', { type: 'checkbox', id: 'dm-on', role: 'switch', checked: !!(admin.demo && admin.demo.on) });
+      cb.addEventListener('change', async () => { await post('api/admin/demo', { on: cb.checked }); await loadAdmin(); poll(); });
+      replace(dm, h('h3', { text: 'Demo data' }), h('p', { class: 'hint', text: 'Show realistic sample data on every screen, for trying the dashboard before its connections are set up. Turns off by itself once they are, unless you switch it here.' }), h('div', { class: 'field toggle' }, h('label', { for: 'dm-on', text: 'Show demo data' }), cb));
+    }
   }
 
   async function renderRoute() {
@@ -313,11 +421,11 @@
     if (r === 'feedback') { show('feedback', 'Feedback', 'Tell us what works and what should change.'); return renderFeedback(d); }
     if (r.startsWith('admin/') && d.me.role === 'admin') {
       const v = r.slice(6);
-      const titles = { settings: ['Settings', 'How the solution is configured.'], users: ['Users & access', 'Who can sign in and what each person sees.'], activity: ['Activity', 'Every change, run and piece of feedback.'], control: ['Control', 'Pause client access or run any action.'] };
+      const titles = { connections: ['Connections', 'Keys and logins for the services this solution uses.'], settings: ['Settings', 'How the solution is configured.'], users: ['Users & access', 'Who can sign in and what each person sees.'], activity: ['Activity', 'Every change, run and piece of feedback.'], control: ['Control', 'Pause client access or run any action.'] };
       if (!titles[v]) return;
       show(v, ...titles[v]);
       try { await loadAdmin(); } catch { return; }
-      return ({ settings: renderSettings, users: renderUsers, activity: renderActivity, control: renderControl })[v]();
+      return ({ connections: renderConnections, settings: renderSettings, users: renderUsers, activity: renderActivity, control: renderControl })[v]();
     }
     show('overview', 'Overview', d.app.tagline || '');
     renderOverview(d);
@@ -345,7 +453,7 @@
       $('#appName').textContent = d.app.name; $('#tagline').textContent = d.app.tagline || ''; $('#gateName').textContent = d.app.name;
       once('nav', [d.panes, d.me], () => renderNav(d));
       showNotice(d.maintenance && d.maintenance.on ? 'Client access is paused' + (d.maintenance.message ? ': ' + d.maintenance.message : '.') : '', 'warn');
-      replace($('#foot'), d.app.mock ? [h('b', { text: 'Sample data' }), ': this is the planned layout; the build fills in real numbers.'] : 'Updated ' + new Date(d.at).toLocaleTimeString());
+      replace($('#foot'), d.app.mock ? [h('b', { text: 'Sample data' }), ': this is the planned layout; the build fills in real numbers.'] : d.app.demo ? [h('b', { text: 'Demo data' }), ' · updated ' + new Date(d.at).toLocaleTimeString()] : 'Updated ' + new Date(d.at).toLocaleTimeString());
       const r = route();
       if (first || !r.startsWith('admin/')) renderRoute();
     } catch (e) { if (e.message !== 'signed out' && e.message !== 'maintenance') { $('#live').classList.add('off'); $('#live').textContent = 'Offline'; } }

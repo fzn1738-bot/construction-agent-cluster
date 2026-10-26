@@ -51,6 +51,7 @@
     <main id="view">
       <section class="view" id="v-overview" aria-label="Overview">
         <div class="orb-sec">
+          <div class="hero" id="hero" hidden></div>
           <div class="orb" id="orb">
             <div class="orb-glow" aria-hidden="true"></div>
             <canvas id="orbCanvas" aria-hidden="true"></canvas>
@@ -67,6 +68,7 @@
           <div class="actions" id="actions" aria-label="Run"></div>
           <div class="runout" id="runOut" role="status" hidden></div>
         </div>
+        <div class="setup" id="setup" hidden></div>
         <div class="tiles" id="tiles"></div>
         <div class="services" id="services"></div>
         <div class="panels" id="panels"></div>
@@ -77,6 +79,7 @@
       </section>
 
       <section class="view" id="v-pane" hidden>
+        <div class="pane-custom" id="paneCustom" hidden></div>
         <div class="actions start" id="paneActions"></div>
         <div class="runout" id="paneOut" role="status" hidden></div>
         <div class="tiles" id="paneTiles"></div>
@@ -103,6 +106,9 @@
       </section>
 
       <section class="view" id="v-settings" hidden><form class="card form" id="settingsForm"></form></section>
+      <section class="view" id="v-connections" hidden>
+        <div class="card"><h3>Connections <span class="chip" id="connCount"></span></h3><p class="hint">The services this solution uses. Enter each one's keys or logins, then test it. Saved keys stay hidden; a key already in the solution's .env counts too.</p><div id="connList"></div></div>
+      </section>
       <section class="view" id="v-users" hidden>
         <form class="card form" id="addUser"></form>
         <div class="card"><h3>People with access</h3><div id="userList"></div></div>
@@ -115,6 +121,7 @@
       </section>
       <section class="view" id="v-control" hidden>
         <form class="card form" id="maintForm"></form>
+        <form class="card form" id="demoForm"></form>
         <div class="card"><h3>Run anything</h3><p class="hint">Every action the solution has, including admin-only ones.</p><div class="actions start" id="allActions"></div><div class="runout" id="ctlOut" role="status" hidden></div></div>
       </section>
       <p class="foot" id="foot"></p>

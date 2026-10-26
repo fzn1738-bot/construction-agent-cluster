@@ -22,7 +22,7 @@ export async function status() {
 }
 
 export async function metrics() {
-  return (SPEC.metrics || []).slice(0, 12).map((m) => {
+  return (SPEC.metrics || []).slice(0, 32).map((m) => {
     const [base, wig] = m.unit === '%' ? [82 + rnd() * 10, 6] : /^(d|days?)$/.test(m.unit || '') ? [8 + rnd() * 20, 4] : m.unit === 's' ? [1 + rnd() * 3, 0.8] : m.unit === 'ms' ? [120 + rnd() * 200, 60] : m.unit === '$' ? [20 + rnd() * 200, 30] : [10 + rnd() * 90, 14];
     const t = series(14, base, wig).map((v) => (m.unit === '%' ? Math.min(v, 100) : v));
     return { key: m.key || m.label, label: m.label, value: m.sample ?? t[t.length - 1], unit: m.unit || '', trend: t, good: m.good || 'up', ...(m.pane ? { pane: m.pane } : {}) };
@@ -32,14 +32,17 @@ export async function metrics() {
 export async function panels() {
   // a pane with nothing listed still shows something in the mockup: a sample table of its recent items
   const listed = new Set((SPEC.panes || []).flatMap((p) => p.panels || []));
-  const extra = (SPEC.panes || []).filter((p) => !(p.panels || []).length).map((p) => ({ title: p.title + ': recent', kind: 'table', fields: ['Item', 'Status', 'Updated'], pane: p.id }));
-  return [...(SPEC.panels || []).slice(0, 12), ...extra].map((p) => {
+  // the plan or the design can give a pane its own records (columns and sample rows) so the mockup shows that feature
+  const extra = (SPEC.panes || []).filter((p) => !(p.panels || []).length || (p.columns && p.columns.length && !(p.panels || []).some((t) => (SPEC.panels || []).some((x) => x.title === t && x.kind === 'table'))))
+    .map((p) => ({ title: p.recordsTitle || (p.title + ': recent'), kind: 'table', fields: p.columns && p.columns.length ? p.columns : ['Item', 'Status', 'Updated'], sample: p.sample, pane: p.id }));
+  return [...(SPEC.panels || []).slice(0, 32), ...extra].map((p) => {
     const kind = ['line', 'bar', 'table', 'list'].includes(p.kind) ? p.kind : 'table';
     if (kind === 'line' || kind === 'bar') {
       const labels = Array.from({ length: kind === 'bar' ? 6 : 12 }, (_, i) => (p.labels && p.labels[i]) || (kind === 'bar' ? 'Item ' + (i + 1) : 'D' + (i + 1)));
       return { title: p.title, kind, labels, series: [{ name: (p.fields && p.fields[0]) || p.title, values: series(labels.length, 30 + rnd() * 50, 25) }], ...(p.pane ? { pane: p.pane } : {}) };
     }
-    const cols = (p.fields && p.fields.length ? p.fields : ['Name', 'Status', 'Updated']).slice(0, 5);
+    const cols = (p.fields && p.fields.length ? p.fields : ['Name', 'Status', 'Updated']).slice(0, 6);
+    if (Array.isArray(p.sample) && p.sample.length) return { title: p.title, kind, columns: cols, rows: p.sample.slice(0, 8).map((r) => cols.map((_, i) => String((Array.isArray(r) ? r[i] : r && r[cols[i]]) ?? ''))), ...(p.pane ? { pane: p.pane } : {}) };
     const rows = Array.from({ length: 5 }, (_, r) => cols.map((c, i) => (i === 0 ? c + ' ' + (r + 1) : /status|state/i.test(c) ? ['OK', 'Running', 'OK', 'Queued', 'OK'][r] : /time|date|updated|at$/i.test(c) ? (r + 1) * 7 + ' min ago' : String(Math.round(rnd() * 900) / 10))));
     return { title: p.title, kind, columns: cols, rows, ...(p.pane ? { pane: p.pane } : {}) };
   });
@@ -53,3 +56,13 @@ export async function run(id) {
 export async function reports() {
   return (SPEC.reports || ['Daily summary', 'Weekly performance']).slice(0, 4).map((t, i) => ({ title: typeof t === 'string' ? t : t.title, href: '', createdAt: new Date(Date.now() - i * 864e5).toISOString() }));
 }
+
+// a pane's own screen gets its planned records (columns and sample rows) and its metrics
+export async function pane(id) {
+  const p = (SPEC.panes || []).find((x) => x.id === id) || {};
+  const cols = (p.columns || []).length ? p.columns : ['Item', 'Status', 'Updated'];
+  const rows = (p.sample || []).length ? p.sample : Array.from({ length: 4 }, (_, r) => cols.map((c, i) => (i === 0 ? c + ' ' + (r + 1) : '–')));
+  const mets = (await metrics()).filter((m) => (p.metrics || []).includes(m.key));
+  return { title: p.recordsTitle || p.title || id, columns: cols, rows, metrics: mets, sample: true };
+}
+export async function paneAction(id, action) { return { ok: true, message: 'Sample: "' + action + '" on ' + id + ' would run here' }; }
