@@ -8,6 +8,12 @@ import fs from 'node:fs';
 import path from 'node:path';
 import * as kit from './store.mjs';
 import * as O from './outcomes.mjs';
+import { isRpaPane, RPA_ACTIONS } from './rpa-panes.mjs';
+import { demoRpa } from './rpa-demo.mjs';
+import { liveRpa, agentReady, probeAgent, agentSettings } from './rpa-live.mjs';
+
+// Workflow automation has its own connection: once the agent is saved it is live even while the other outcomes are still on demo data.
+const rpa = () => (agentReady() ? liveRpa() : demoRpa());
 
 const DATA = kit.DATA;
 const REPORTS = path.join(DATA, 'reports');
@@ -186,6 +192,7 @@ const demoServices = (w) => ({ ...w, services: [...w.setup, ...w.services.filter
 
 // ---------- the exports ----------
 export async function pane(id, ctx = {}) {
+  if (isRpaPane(id)) return rpa().pane(id, ctx);
   if (OUTCOME_DATA[id]) return OUTCOME_DATA[id]();
   if (!Object.values(PANE).includes(id)) return null;
   const w = world();
@@ -204,7 +211,7 @@ async function allowOf(ctx) {
 }
 
 export async function status() { return O.statusOf(world()); }
-export async function paneStatus() { const w = world(); return { ...O.paneStates(w), [PANE.services]: O.paneStates(demoServices(w))[PANE.services] }; }
+export async function paneStatus() { const w = world(); return { ...O.paneStates(w), ...rpa().states(), [PANE.services]: O.paneStates(demoServices(w))[PANE.services] }; }
 
 export async function metrics() {
   const w = world();
@@ -219,7 +226,8 @@ export async function metrics() {
     { key: 'emailsProcessed', label: 'Emails triaged', value: triaged(), unit: '', trend: t(st.messages), good: 'up', pane: 'inbox' },
     { key: 'emailBacklog', label: 'Inbox backlog', value: 0, unit: '', trend: [2, 1, 0, 0], good: 'down', pane: 'inbox' },
     { key: 'logRows', label: 'Events on record', value: logRows(), unit: '', trend: [3380, 3392, 3401, 3410, logRows()], good: 'up', pane: 'activity-log' },
-    { key: 'dbIntegrity', label: 'Record integrity', value: 100, unit: '%', trend: [100, 100, 100], good: 'up', pane: 'activity-log' }
+    { key: 'dbIntegrity', label: 'Record integrity', value: 100, unit: '%', trend: [100, 100, 100], good: 'up', pane: 'activity-log' },
+    ...rpa().metrics()
   ].filter((m) => SPEC.metrics.some((s) => s.key === m.key));
 }
 
@@ -238,7 +246,8 @@ export async function panels() {
     'Latest events': () => ({ title: 'Latest events', kind: 'table', columns: ['Source', 'Result', 'What', 'When'], rows: act.events.slice(0, 12).map((e) => [e.source, e.result, e.what, rel(e.at)]), pane: 'activity-log' })
   };
   const meta = Object.fromEntries([...O.metaPanels(w), O.metaPanels(demoServices(w)).find((p) => p.title === 'Service checklist')].map((p) => [p.title, p]));
-  return SPEC.panels.map((p) => (own[p.title] ? own[p.title]() : meta[p.title])).filter(Boolean);
+  const flow = Object.fromEntries(rpa().panels().map((p) => [p.title, p]));
+  return SPEC.panels.map((p) => (own[p.title] ? own[p.title]() : flow[p.title] || meta[p.title])).filter(Boolean);
 }
 
 // ---------- actions (they add records so the screens respond) ----------
@@ -283,6 +292,7 @@ function snapshot() {
 
 export async function run(id, input, ctx = {}) {
   const allow = await allowOf(ctx); const by = byOf(ctx);
+  if (RPA_ACTIONS.includes(id)) return rpa().run(id, ctx);
   const o = O.OUTCOMES.find((x) => x.action === id);
   if (o) return allow(o.id) ? DO[o.id](by) : { ok: false, message: NOT_YOURS };
   if (id === 'run') { const r = await runMine(allow, by); return { ...r, message: r.output ? r.output.length + ' task(s) run, 0 failed (demo)' : r.message }; }
@@ -307,6 +317,7 @@ const ADMIN_ONLY = 'Only the admin can change settings.';
 const real = () => import('./hooks.mjs');   // keys are saved for real even from the demo: that is how you leave it
 
 export async function paneAction(id, action, input, ctx = {}) {
+  if (isRpaPane(id)) return rpa().act(id, action, input, ctx);
   const inp = input && typeof input === 'object' ? input : {};
   const admin = !ctx || !ctx.user || ctx.user.role === 'admin';
   const allow = await allowOf(ctx); const by = byOf(ctx);
@@ -367,8 +378,9 @@ export async function paneAction(id, action, input, ctx = {}) {
   return { ok: false, message: 'Unknown action' };
 }
 
-export async function testConnection(id) {
-  const ms = { folders: 4, ftp: 212, imap: 187 }[id];
+export async function testConnection(id, settings) {
+  if (id === 'rpa-agent' && agentSettings(settings || {}).url) return probeAgent(settings);
+  const ms = { folders: 4, ftp: 212, imap: 187, 'rpa-agent': 96 }[id];
   if (!ms) return { ok: false, message: 'Unknown connection' };
   return { ok: true, message: 'Demo: connection simulated, ' + ms + ' ms. Enter your own details to test the real service.' };
 }

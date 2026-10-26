@@ -39,7 +39,7 @@ test('F7: demo data is seeded: two reads give the same records', async () => {
   const a = await demo.pane('inbox'), b = await demo.pane('inbox');
   assert.deepEqual(a.messages.map((m) => m.subject), b.messages.map((m) => m.subject));
   assert.deepEqual((await demo.panels())[0].series, (await demo.panels())[0].series);
-  assert.deepEqual((await demo.pane('connections-for-every-outside')).rows.map((r) => r[0]), ['Site folder', 'Contractor FTP server', 'Project mailbox (IMAP)', 'Activity record database']);
+  assert.deepEqual((await demo.pane('connections-for-every-outside')).rows.map((r) => r[0]), ['Site folder', 'Contractor FTP server', 'Project mailbox (IMAP)', 'Desktop automation agent', 'Activity record database']);
 });
 
 test('F4: demo buttons work and their results land in the records and the history', async () => {

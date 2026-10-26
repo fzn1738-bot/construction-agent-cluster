@@ -93,6 +93,54 @@
       "label": "Record integrity",
       "unit": "%",
       "good": "up"
+    },
+    {
+      "key": "wfRuns",
+      "label": "Workflow runs today",
+      "unit": "",
+      "good": "up"
+    },
+    {
+      "key": "wfSuccess",
+      "label": "Workflow success rate",
+      "unit": "%",
+      "good": "up"
+    },
+    {
+      "key": "wfAvg",
+      "label": "Avg workflow run time",
+      "unit": "s",
+      "good": "down"
+    },
+    {
+      "key": "wfErrors",
+      "label": "Workflow failures",
+      "unit": "",
+      "good": "down"
+    },
+    {
+      "key": "wfCount",
+      "label": "Workflows trained",
+      "unit": "",
+      "good": "up"
+    },
+    {
+      "key": "wfScheduled",
+      "label": "On a schedule or trigger",
+      "unit": "",
+      "good": "up"
+    },
+    {
+      "key": "wfRecorded",
+      "label": "Steps recorded",
+      "unit": "",
+      "good": "up"
+    },
+    {
+      "key": "wfWaiting",
+      "label": "Waiting for approval",
+      "unit": "",
+      "good": "down"
     }
   ],
   "panels": [
@@ -170,6 +218,20 @@
         "What",
         "When"
       ]
+    },
+    {
+      "title": "Workflow runs, last 24 hours",
+      "kind": "line",
+      "fields": [
+        "Runs"
+      ]
+    },
+    {
+      "title": "Workflow results",
+      "kind": "bar",
+      "fields": [
+        "Runs"
+      ]
     }
   ],
   "actions": [
@@ -202,6 +264,19 @@
       "id": "check-database",
       "label": "Check the record",
       "description": "Verify the activity record is intact",
+      "input": null
+    },
+    {
+      "id": "run-due-workflows",
+      "label": "Run due workflows now",
+      "description": "Start every workflow whose schedule is due",
+      "input": null,
+      "adminOnly": true
+    },
+    {
+      "id": "stop-all-runs",
+      "label": "Stop all running workflows",
+      "description": "Halt every workflow that is running right now",
       "input": null
     }
   ],
@@ -310,6 +385,96 @@
         "When"
       ],
       "recordsTitle": "Events"
+    },
+    {
+      "id": "rpa-record",
+      "title": "Record a workflow",
+      "summary": "Watch a task being done once, with a screenshot for every click, typed value and page change, and turn it into a workflow.",
+      "feature": "F1",
+      "metrics": [
+        "wfRecorded"
+      ],
+      "panels": [],
+      "actions": [],
+      "client": true,
+      "layout": "split",
+      "columns": [
+        "Step",
+        "Action",
+        "Target",
+        "Screenshot"
+      ],
+      "recordsTitle": "Captured steps"
+    },
+    {
+      "id": "rpa-workflows",
+      "title": "Workflows",
+      "summary": "Each customer's trained workflows: rename and reorder steps, add variables and approval checkpoints, schedule them or start them from a trigger.",
+      "feature": "F5",
+      "metrics": [
+        "wfCount",
+        "wfScheduled"
+      ],
+      "panels": [],
+      "actions": [],
+      "client": true,
+      "layout": "split",
+      "columns": [
+        "Workflow",
+        "Steps",
+        "Schedule",
+        "Last run"
+      ],
+      "recordsTitle": "Workflows"
+    },
+    {
+      "id": "rpa-run",
+      "title": "Run a workflow",
+      "summary": "Replay a workflow and watch every step live with its screenshot, pass or fail, approvals and a stop button.",
+      "feature": "F6",
+      "metrics": [
+        "wfWaiting"
+      ],
+      "panels": [],
+      "actions": [
+        "run-due-workflows",
+        "stop-all-runs"
+      ],
+      "client": true,
+      "layout": "focus",
+      "columns": [
+        "Step",
+        "State",
+        "Time",
+        "Screenshot"
+      ],
+      "recordsTitle": "Steps"
+    },
+    {
+      "id": "rpa-history",
+      "title": "Run history",
+      "summary": "Every run with its log, errors and screenshots, and a way to continue from the step that failed.",
+      "feature": "F8",
+      "metrics": [
+        "wfRuns",
+        "wfSuccess",
+        "wfAvg",
+        "wfErrors"
+      ],
+      "panels": [
+        "Workflow runs, last 24 hours",
+        "Workflow results"
+      ],
+      "actions": [],
+      "client": true,
+      "layout": "grid",
+      "columns": [
+        "Workflow",
+        "Result",
+        "Started",
+        "Time"
+      ],
+      "recordsTitle": "Runs"
     }
   ],
   "settings": [
@@ -458,6 +623,56 @@
       "type": "number",
       "default": 1500,
       "group": "Monitoring"
+    },
+    {
+      "key": "rpa_agent_url",
+      "label": "Automation agent address",
+      "type": "text",
+      "group": "Workflow automation",
+      "help": "Address of the desktop automation agent that performs clicks and typing, e.g. http://127.0.0.1:7788"
+    },
+    {
+      "key": "rpa_agent_token",
+      "label": "Automation agent token",
+      "type": "secret",
+      "group": "Workflow automation",
+      "help": "Sent as a Bearer token with every request to the agent."
+    },
+    {
+      "key": "rpa_login_user",
+      "label": "Login used by workflows",
+      "type": "secret",
+      "group": "Workflow automation",
+      "help": "Filled into steps that use {{login_user}}. Never shown to clients."
+    },
+    {
+      "key": "rpa_login_password",
+      "label": "Password used by workflows",
+      "type": "secret",
+      "group": "Workflow automation",
+      "help": "Filled into steps that use {{login_password}}. Passwords typed while recording are never saved."
+    },
+    {
+      "key": "rpa_step_delay_ms",
+      "label": "Pause between steps (ms)",
+      "type": "number",
+      "default": 400,
+      "group": "Workflow automation"
+    },
+    {
+      "key": "rpa_max_retries",
+      "label": "Retries for a failing step",
+      "type": "number",
+      "default": 1,
+      "group": "Workflow automation",
+      "help": "0 to 5."
+    },
+    {
+      "key": "rpa_approval_minutes",
+      "label": "Minutes to wait for an approval",
+      "type": "number",
+      "default": 30,
+      "group": "Workflow automation"
     }
   ],
   "connections": [
@@ -506,6 +721,24 @@
         "imap_secure",
         "imap_mailbox",
         "imap_rules"
+      ]
+    },
+    {
+      "id": "rpa-agent",
+      "name": "Desktop automation agent",
+      "summary": "Performs recorded clicks and typing on the machine where the work is done, takes the screenshots and reports each step back.",
+      "docs": "",
+      "required": false,
+      "fields": [
+        "rpa_agent_url",
+        "rpa_agent_token"
+      ],
+      "optional": [
+        "rpa_login_user",
+        "rpa_login_password",
+        "rpa_step_delay_ms",
+        "rpa_max_retries",
+        "rpa_approval_minutes"
       ]
     }
   ],

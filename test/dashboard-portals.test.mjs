@@ -32,11 +32,12 @@ const client = async (panes, canRun = true) => {
   return { 'x-app-key': r.code };
 };
 const outcomes = ['documents', 'transfers', 'inbox', 'activity-log'];
+const rpaPanes = ['rpa-record', 'rpa-workflows', 'rpa-run', 'rpa-history'];
 
 test('F1/F2/F3/F8: only delivered client outcomes are tabs, each with its own live screen and overview state', async () => {
   const s = await summary();
-  assert.deepEqual(s.panes.map((p) => p.id), outcomes);
-  assert.deepEqual(spec.panes.map((p) => p.id), outcomes);
+  assert.deepEqual(s.panes.map((p) => p.id), [...outcomes, ...rpaPanes]);
+  assert.deepEqual(spec.panes.map((p) => p.id), [...outcomes, ...rpaPanes]);
   assert.equal(s.app.hero, 'hero.js');
   const ms = await hooks.metrics(), ps = await hooks.panels();
   assert.deepEqual(ms.map((m) => m.key).sort(), spec.metrics.map((m) => m.key).sort());
