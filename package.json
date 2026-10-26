@@ -4,6 +4,7 @@
   "type": "module",
   "scripts": {
     "test": "node --test",
-    "dashboard": "node dashboard/server.mjs"
+    "dashboard": "node dashboard/server.mjs",
+    "rpa-agent": "node agent/rpa-agent.mjs"
   }
 }

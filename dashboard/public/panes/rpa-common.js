@@ -27,7 +27,8 @@ export function check(h, name, label, on = false) {
 
 /** A screenshot thumbnail; pressing it asks the screen to show it large. */
 export function thumb(h, src, alt, onOpen, note) {
-  if (!src) return h('span', { class: 'rpa-noshot', title: note || '', text: note ? 'Withheld' : 'No picture' });
+  // no picture is said plainly: withheld on purpose (a secret, a private screen) or simply not captured
+  if (!src) return h('span', { class: 'rpa-noshot', title: note || '', text: /withheld|removed/i.test(note || '') ? 'Withheld' : 'No capture' });
   const img = h('img', { class: 'rpa-shot', src, alt, loading: 'lazy', width: '96', height: '60' });
   return onOpen ? h('button', { class: 'rpa-thumb', type: 'button', 'aria-label': 'Enlarge screenshot: ' + alt, onclick: onOpen }, img) : img;
 }
@@ -71,6 +72,29 @@ export function runSteps(api, run, columns = ['Step', 'State', 'Time', 'Screensh
     }
   });
 }
+/**
+ * The workflow a screen works on. The choice is shared by Typed inputs, Apps & pages, Workflows, Step editor, Order &
+ * checkpoints and Variables, so moving between them keeps the same workflow open.
+ */
+export function wfPicker(api, d, hint) {
+  const { h } = api;
+  if (!d.workflows || !d.workflows.length) return null;
+  const sel = select(h, 'workflow', d.workflows.map((w) => [w.id, w.name + (d.isAdmin ? ' · ' + w.clientName : '')]), d.selected ? d.selected.id : '');
+  sel.addEventListener('change', () => api.act('select', { id: sel.value }, { quiet: true }));
+  return h('div', { class: 'rpa-picker' }, field(h, 'Workflow', sel, hint));
+}
+/** A link to another workflow screen. */
+export const paneLink = (h, id, label) => h('a', { class: 'linkbtn', href: '#/pane/' + id, text: label });
+/** What a workflow screen shows before there is any workflow. */
+export function noWorkflows(h, what) {
+  return h('section', { class: 'cg-card rpa-empty', 'aria-label': 'No workflows yet' },
+    h('h3', { text: 'No workflows yet' }),
+    h('p', { class: 'cg-note', text: 'Record a task once and save it as a workflow; ' + what + ' appear here.' }),
+    h('div', { class: 'cg-actions' }, paneLink(h, 'rpa-record', 'Record a workflow'), paneLink(h, 'rpa-workflows', 'Open Workflows')));
+}
+/** Where a step happens: the app, then the page. */
+export const whereOf = (s) => [s.app, s.page].filter(Boolean).join(' · ');
+
 /** The run log, newest last, one line each. */
 export function logList(h, log) {
   if (!log || !log.length) return h('p', { class: 'cg-note', text: 'Nothing logged yet.' });

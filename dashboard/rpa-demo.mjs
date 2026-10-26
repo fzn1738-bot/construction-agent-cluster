@@ -1,25 +1,51 @@
 // Seeded demo for the Workflow Automation screens: two business customers (Harlow Build, Northbeam Architects), each with
 // their own trained workflows, a week of runs (a few failing, one stopped, one resumed) and a half-finished recording.
-// Everything is in memory; steps are simulated, so buttons work before any automation agent is connected.
+// Everything is in memory; steps are simulated, so buttons work before any automation agent is connected. The demo
+// recorder stands in for the desktop agent: while a recording runs it hands over one action of a sample task per poll,
+// with an illustration of the screen where the real agent sends its screen capture.
 import { RpaStore, demoDriver, renderShot } from '../src/rpa.mjs';
 import { createRpa } from './rpa-panes.mjs';
 
 export const DEMO_CLIENTS = [{ id: 'demo-harlow', name: 'Harlow Build' }, { id: 'demo-northbeam', name: 'Northbeam Architects' }];
 const HARLOW = DEMO_CLIENTS[0].id, NORTH = DEMO_CLIENTS[1].id;
 
-const SAMPLE_EVENTS = [
-  { kind: 'app', app: 'Procore' },
-  { kind: 'navigate', page: 'https://app.procore.example/harlow/rfis/new' },
-  { kind: 'type', target: 'RFI subject', value: 'Slab edge detail at gridline C' },
-  { kind: 'type', target: 'Password', value: 'not-kept' },
-  { kind: 'click', target: 'Create RFI' }
+/** The sample task the demo recorder "watches": a site manager raising an RFI in Procore. */
+export const SAMPLE_EVENTS = [
+  { kind: 'app', app: 'Safari' },
+  { kind: 'navigate', page: 'https://app.procore.example/harlow/rfis/new?session=demo', app: 'Safari' },
+  { kind: 'click', target: 'Sign in', app: 'Safari' },
+  { kind: 'type', target: 'Password', value: 'not-kept', inputType: 'password', sensitive: true, app: 'Safari' },
+  { kind: 'type', target: 'RFI subject', value: 'Slab edge detail at gridline C', app: 'Safari' },
+  { kind: 'type', target: 'Customer name', value: 'Harlow Build', app: 'Safari' },
+  { kind: 'select', target: 'Priority', value: 'High', app: 'Safari' },
+  { kind: 'click', target: 'Create RFI', app: 'Safari' },
+  { kind: 'app', app: 'Outlook' },
+  { kind: 'click', target: 'Send', app: 'Outlook' }
 ];
+/** An illustration of the screen for a demo action (the desktop agent sends a real capture instead). */
+const pictured = (e) => (e.sensitive ? { ...e, value: '' } : { ...e, screenshot: renderShot({ ...e, name: e.target || e.page || e.app }) });
+
+/** Stands in for the desktop agent in Record mode: one action of the sample task per poll, then nothing more. */
+export function demoRecorder(events = SAMPLE_EVENTS) {
+  const sessions = new Map();
+  return {
+    mode: 'demo',
+    start: async (rec) => { sessions.set(rec.id, 0); return { ok: true }; },
+    stop: async (rec) => { sessions.delete(rec.id); return { ok: true }; },
+    pull: async (rec, after) => {
+      if (!sessions.has(rec.id)) return { ok: false, message: 'The demo recorder is not watching this recording' };
+      const i = Number(after) || 0;
+      if (i >= events.length) return { ok: true, events: [], next: i };
+      return { ok: true, events: [pictured({ ...events[i], at: Date.now() })], next: i + 1 };
+    }
+  };
+}
 
 function build(now) {
   const store = new RpaStore({ driver: demoDriver({ latencyMs: 350 }), settings: () => ({ stepDelayMs: 300, maxRetries: 1, approvalTimeoutMs: 3600000, builtins: { login_user: 'demo', login_password: 'demo' } }), now });
   const rec = (scope, name, app, events) => {
     const r = store.startRecording(scope, { name, app, client: scope.admin ? HARLOW : '' });
-    events.forEach((e, i) => store.recordEvent(scope, r.id, { ...e, at: 1000 + i * 4000 }));
+    events.forEach((e, i) => store.recordEvent(scope, r.id, pictured({ ...e, at: 1000 + i * 4000 })));
     return r;
   };
   const make = (client, name, events, vars, bind, approvalAt) => {
@@ -67,7 +93,7 @@ function build(now) {
         const st = state === 'passed' ? 'passed' : i < failAt ? 'passed' : i === failAt ? (state === 'stopped' ? 'stopped' : 'failed') : 'skipped';
         const sh = 'shot-seed-' + store.state.runs.length + '-' + i;
         store.state.shots[sh] = renderShot(s, st === 'failed' ? 'failed' : 'ok');
-        return { id: s.id, idx: i, name: s.name, kind: s.kind, target: s.target, value: s.value, approval: s.approval, approvalNote: s.approvalNote, optional: false, secret: false, state: st, message: st === 'passed' ? 'Done' : st === 'failed' ? (error || 'The step failed') : st === 'stopped' ? 'Stopped by Dana during this step' : 'Not run: an earlier step failed', ms: st === 'passed' ? 700 + i * 120 : 0, attempts: st === 'skipped' ? 0 : st === 'failed' ? 2 : 1, refShot: s.shot, shot: sh, startedAt: new Date(started + i * 900).toISOString() };
+        return { id: s.id, idx: i, name: s.name, kind: s.kind, target: s.target, value: s.value, page: s.page || '', app: s.app || '', code: st === 'failed' && /Could not find/.test(error || '') ? 'target-missing' : '', approval: s.approval, approvalNote: s.approvalNote, optional: false, secret: false, state: st, message: st === 'passed' ? 'Done' : st === 'failed' ? (error || 'The step failed') : st === 'stopped' ? 'Stopped by Dana during this step' : 'Not run: an earlier step failed', ms: st === 'passed' ? 700 + i * 120 : 0, attempts: st === 'skipped' ? 0 : st === 'failed' ? 2 : 1, refShot: s.shot, shot: sh, startedAt: new Date(started + i * 900).toISOString() };
       }),
       log: []
     };
@@ -96,7 +122,7 @@ function build(now) {
   // an unfinished recording for the owner's Record screen
   const owner = { admin: true };
   const r = store.startRecording(owner, { name: 'Close out a snag', app: 'Fieldwire', client: HARLOW });
-  [{ kind: 'app', app: 'Fieldwire' }, { kind: 'click', target: 'Snag list' }, { kind: 'type', target: 'Snag reference', value: 'SNG-204' }].forEach((e, i) => store.recordEvent(owner, r.id, { ...e, at: 1000 + i * 4000 }));
+  [{ kind: 'app', app: 'Fieldwire' }, { kind: 'click', target: 'Snag list' }, { kind: 'type', target: 'Snag reference', value: 'SNG-204' }].forEach((e, i) => store.recordEvent(owner, r.id, pictured({ ...e, at: 1000 + i * 4000 })));
   store.stopRecording(owner, r.id);
   return store;
 }
@@ -106,11 +132,10 @@ let cached = null;
 export function demoRpa() {
   if (cached) return cached;
   const store = build(Date.now);
-  let pulled = 0;
   cached = createRpa({
-    store, demo: true, clients: () => DEMO_CLIENTS, demoClient: HARLOW, agent: () => ({ configured: false, demo: true }),
-    needs: 'Add the desktop automation agent address and token in Connections', missing: ['Agent address', 'Agent token'],
-    pull: async () => { const ev = SAMPLE_EVENTS[pulled++ % SAMPLE_EVENTS.length]; return { ok: true, events: [{ ...ev, at: Date.now() }], next: pulled }; }
+    store, demo: true, clients: () => DEMO_CLIENTS, demoClient: HARLOW, recorder: demoRecorder(),
+    needs: 'Run the desktop automation agent on your Mac and add its address and token in Connections', missing: ['Agent address', 'Agent token'],
+    builtinsReady: () => ({ login_user: true, login_password: true })
   });
   return cached;
 }

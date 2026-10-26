@@ -211,9 +211,9 @@ async function allowOf(ctx) {
 }
 
 export async function status() { return O.statusOf(world()); }
-export async function paneStatus() { const w = world(); return { ...O.paneStates(w), ...rpa().states(), [PANE.services]: O.paneStates(demoServices(w))[PANE.services] }; }
+export async function paneStatus(ctx = {}) { const w = world(); return { ...O.paneStates(w), ...rpa().states(ctx), [PANE.services]: O.paneStates(demoServices(w))[PANE.services] }; }
 
-export async function metrics() {
+export async function metrics(ctx = {}) {
   const w = world();
   const t = (items) => hourly(items).values;
   const meta = O.metaMetrics(w).map((m) => (m.key === 'ready' ? O.metaMetrics(demoServices(w)).find((x) => x.key === 'ready') : m));
@@ -227,11 +227,11 @@ export async function metrics() {
     { key: 'emailBacklog', label: 'Inbox backlog', value: 0, unit: '', trend: [2, 1, 0, 0], good: 'down', pane: 'inbox' },
     { key: 'logRows', label: 'Events on record', value: logRows(), unit: '', trend: [3380, 3392, 3401, 3410, logRows()], good: 'up', pane: 'activity-log' },
     { key: 'dbIntegrity', label: 'Record integrity', value: 100, unit: '%', trend: [100, 100, 100], good: 'up', pane: 'activity-log' },
-    ...rpa().metrics()
+    ...rpa().metrics(ctx)
   ].filter((m) => SPEC.metrics.some((s) => s.key === m.key));
 }
 
-export async function panels() {
+export async function panels(ctx = {}) {
   const w = world();
   const docs = documentsData(), tr = transfersData(), inb = inboxData(), act = activityData();
   const line = (title, name, b, pane) => ({ title, kind: 'line', labels: b.labels, series: [{ name, values: b.values }], pane });
@@ -246,7 +246,7 @@ export async function panels() {
     'Latest events': () => ({ title: 'Latest events', kind: 'table', columns: ['Source', 'Result', 'What', 'When'], rows: act.events.slice(0, 12).map((e) => [e.source, e.result, e.what, rel(e.at)]), pane: 'activity-log' })
   };
   const meta = Object.fromEntries([...O.metaPanels(w), O.metaPanels(demoServices(w)).find((p) => p.title === 'Service checklist')].map((p) => [p.title, p]));
-  const flow = Object.fromEntries(rpa().panels().map((p) => [p.title, p]));
+  const flow = Object.fromEntries(rpa().panels(ctx).map((p) => [p.title, p]));
   return SPEC.panels.map((p) => (own[p.title] ? own[p.title]() : flow[p.title] || meta[p.title])).filter(Boolean);
 }
 

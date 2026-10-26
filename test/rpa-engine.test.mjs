@@ -5,7 +5,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import http from 'node:http';
-import { RpaStore, RpaError, demoDriver, agentDriver, nextOccurrence, renderShot, validShot, cleanPage } from '../src/rpa.mjs';
+import { RpaStore, RpaError, demoDriver, agentDriver, nextOccurrence, renderShot, validShot, cleanPage, MAX_SHOT } from '../src/rpa.mjs';
 
 const ADMIN = { admin: true };
 const acme = { admin: false, client: 'acme' };
@@ -61,17 +61,58 @@ test('F3: bad events are refused with a clear message', () => {
   throwsCode(() => s.startRecording(acme, {}) && s.startRecording(acme, {}), 'busy');
 });
 
-test('F4: every step keeps a screenshot; real ones are stored, unusable ones fall back to a schematic', () => {
+test('F4: a step only shows a real screen capture; a missing or unusable one is said, never faked', () => {
   const s = make(); const rec = s.startRecording(acme, {});
   const real = 'data:image/png;base64,iVBORw0KGgo=';
+  const big = 'data:image/jpeg;base64,' + 'A'.repeat(600000);   // an ordinary full-screen JPEG is accepted
   const a = s.recordEvent(acme, rec.id, { kind: 'click', target: 'Open', screenshot: real, at: 1000 });
+  const g = s.recordEvent(acme, rec.id, { kind: 'click', target: 'Big', screenshot: big, at: 5000 });
   const b = s.recordEvent(acme, rec.id, { kind: 'click', target: 'Next', screenshot: 'javascript:alert(1)', at: 9000 });
-  const c = s.recordEvent(acme, rec.id, { kind: 'click', target: 'Huge', screenshot: 'data:image/png;base64,' + 'A'.repeat(300000), at: 20000 });
+  const c = s.recordEvent(acme, rec.id, { kind: 'click', target: 'Huge', screenshot: 'data:image/png;base64,' + 'A'.repeat(MAX_SHOT + 10), at: 20000 });
+  const n = s.recordEvent(acme, rec.id, { kind: 'click', target: 'Bare', at: 30000 });
+  const f = s.recordEvent(acme, rec.id, { kind: 'click', target: 'Failed capture', shotError: 'No screenshot: screen capture failed (display asleep)', at: 40000 });
   assert.equal(s.shotData(a.step.shot), real);
-  for (const x of [b, c]) { assert.ok(validShot(s.shotData(x.step.shot))); assert.match(x.step.shotNote, /could not be used/); }
-  assert.ok(s.getRecording(acme, rec.id).steps.every((x) => x.shot));
+  assert.equal(s.shotData(g.step.shot), big);
+  for (const x of [b, c]) { assert.equal(x.step.shot, null); assert.match(x.step.shotNote, /not an image or was larger than 1.5 MB/); }
+  assert.equal(n.step.shot, null); assert.match(n.step.shotNote, /came without a screen capture/);
+  assert.match(f.step.shotNote, /display asleep/);
+  const st = s.getRecording(acme, rec.id).stats;
+  assert.equal(st.captured, 2); assert.equal(st.shotsMissing, 4);
   assert.equal(validShot(renderShot({ name: '<b>x</b>', kind: 'click' })), true);
+  const svg = Buffer.from(renderShot({ name: 'x', kind: 'click' }).split(',')[1], 'base64').toString();
+  assert.doesNotMatch(svg, /font-size="(\d|1[01])"/, 'demo illustrations keep to the 12px minimum');
+  assert.doesNotMatch(svg, /font-family="sans-serif"/, 'and the system font stack');
   assert.equal(cleanPage('https://a.example/p?token=1'), 'https://a.example/p');
+});
+
+test('F4: screenshots of a saved store live as files beside it, survive a restart and are removed with their steps', () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'rpa-shots-')); const file = path.join(dir, 'workflows.json');
+  const s = make({ file }); const rec = s.startRecording(acme, {});
+  const shot = 'data:image/png;base64,' + Buffer.from('a real png body').toString('base64');
+  s.recordEvent(acme, rec.id, { kind: 'click', target: 'Open', screenshot: shot, at: 1000 });
+  const wf = s.saveRecording(acme, rec.id, {});
+  const files = () => fs.readdirSync(path.join(dir, 'shots'));
+  assert.equal(files().length, 1); assert.ok(!fs.readFileSync(file, 'utf8').includes('base64'), 'the JSON does not carry the pictures');
+  const again = make({ file });
+  assert.equal(again.shotData(again.getWorkflow(acme, wf.id).steps[0].shot), shot);
+  again.dropShot(acme, { workflow: wf.id }, wf.steps[0].id, 'Dana');
+  assert.match(again.getWorkflow(acme, wf.id).steps[0].shotNote, /removed by Dana/);
+  again.discardRecording(acme, rec.id);
+  assert.equal(files().length, 0, 'a picture nothing uses is deleted');
+});
+
+test('F1/F3: actions take the app and page the user was on; an app switch starts a fresh page context', () => {
+  const s = make(); const rec = s.startRecording(acme, { app: 'Finder' });
+  const ev = (e, at) => s.recordEvent(acme, rec.id, { at, ...e }).step;
+  assert.equal(ev({ kind: 'click', target: 'Desktop' }, 1000).app, 'Finder');
+  ev({ kind: 'app', target: 'Safari' }, 3000);
+  ev({ kind: 'navigate', page: 'https://portal.example/orders?sid=9' }, 5000);
+  const click = ev({ kind: 'click', target: 'New order' }, 7000);
+  assert.equal(click.app, 'Safari'); assert.equal(click.page, 'https://portal.example/orders');
+  ev({ kind: 'app', app: 'Excel' }, 9000);
+  const cell = ev({ kind: 'type', target: 'Cell B2', value: '12' }, 11000);
+  assert.equal(cell.app, 'Excel'); assert.equal(cell.page, '', 'the browser page does not follow into Excel');
+  throwsCode(() => s.recordEvent(acme, rec.id, { kind: 'navigate', target: '', value: '', app: 'Safari' }), 'bad-event');
 });
 
 test('F2/F4: passwords and private steps are redacted and their screenshots withheld', () => {
@@ -102,7 +143,7 @@ test('F5: saving a recording makes an editable workflow; empty recordings cannot
   const s = make(); const { rec } = recorded(s);
   const wf = s.saveRecording(acme, rec.id, { name: 'Raise PO' });
   assert.equal(wf.steps.length, 5); assert.equal(wf.client, 'acme'); assert.equal(wf.source, rec.id);
-  assert.ok(wf.steps.every((x) => x.id && x.name && x.shot));
+  assert.ok(wf.steps.every((x) => x.id && x.name && (x.shot || /No screenshot/.test(x.shotNote))));
   throwsCode(() => s.saveRecording(acme, rec.id, {}), 'saved');
   const empty = s.startRecording(globex, {}); throwsCode(() => s.saveRecording(globex, empty.id, {}), 'empty');
   assert.equal(s.getRecording(acme, rec.id).state, 'saved');
@@ -159,7 +200,7 @@ function ready(s, scope = acme, defaults = {}) {
 
 test('Run mode: replays each step with a screenshot and pass/fail, filling variables', async () => {
   const seen = [];
-  const s = make({ driver: { perform: async (step) => { seen.push(step); return { ok: true, message: 'ok' }; } } });
+  const s = make({ driver: { perform: async (step) => { seen.push(step); return { ok: true, message: 'ok', screenshot: step.kind === 'click' ? 'data:image/png;base64,iVBORw0KGgo=' : undefined }; } } });
   const wf = ready(s);
   throwsCode(() => s.startRun(acme, wf.id, { values: { customer_name: 'Harlow' } }), 'missing-variable');
   const run = s.startRun(acme, wf.id, { values: { customer_name: 'Harlow Build', po_number: 'PO-77' } });
@@ -167,8 +208,13 @@ test('Run mode: replays each step with a screenshot and pass/fail, filling varia
   const done = s.getRun(acme, run.id);
   assert.equal(done.state, 'passed');
   assert.deepEqual(done.steps.map((x) => x.state), Array(5).fill('passed'));
-  assert.ok(done.steps.every((x) => validShot(s.shotData(x.shot))));
+  assert.ok(validShot(s.shotData(done.steps[4].shot)), 'the agent\'s capture of each step is kept');
+  assert.ok(done.steps.slice(0, 4).every((x) => x.shot === null && /sent no screenshot/.test(x.shotNote)), 'no capture is said, never replaced by a drawing');
   assert.equal(seen[2].value, 'Harlow Build'); assert.equal(seen[3].value, 'PO-77');
+  // the recorded app and page travel with every step, so the agent acts in the right window
+  assert.equal(seen[0].app, 'Chrome');
+  assert.equal(seen[1].kind, 'navigate'); assert.equal(seen[1].page, 'https://erp.example/orders/new');
+  assert.equal(seen[4].app, 'Chrome'); assert.equal(seen[4].page, 'https://erp.example/orders/new');
   assert.deepEqual(done.values, { customer_name: 'Harlow Build', po_number: 'PO-77' });
   assert.ok(done.log.length >= 6);
 });
@@ -242,6 +288,22 @@ test('Run mode: the stop button halts the run mid-step and marks the rest as not
   throwsCode(() => s.stopRun(acme, run.id), 'not-running');
 });
 
+test('Run mode: Stop pressed while the last step is in flight ends the run as stopped even when that step passes', async () => {
+  let release;
+  const s = make({ driver: { perform: (step) => (step.target === 'Save' ? new Promise((resolve) => { release = () => resolve({ ok: true, message: 'saved' }); }) : Promise.resolve({ ok: true })) } });
+  const wf = ready(s);
+  const run = s.startRun(acme, wf.id, { values: { customer_name: 'x', po_number: 'y' } });
+  for (let i = 0; i < 50 && !release; i++) await new Promise((r) => setTimeout(r, 5));
+  assert.ok(release, 'the last step is in flight');
+  s.stopRun(acme, run.id, 'Dana');
+  release(); await s.whenIdle(run.id);
+  const r = s.getRun(acme, run.id);
+  assert.equal(r.state, 'stopped', 'a stop request is never reported as a pass');
+  assert.equal(r.steps[4].state, 'passed', 'the step that really finished says so');
+  assert.ok(r.log.some((l) => /Stop requested by Dana/.test(l.text)));
+  assert.equal(s.stats(acme).passed, 0);
+});
+
 test('Run mode: secrets come from Connections or the caller, are never stored and are masked in logs', async () => {
   const log = [];
   const s = make({ settings: () => ({ builtins: { login_password: 'S3cret!' } }), driver: { perform: async (step) => { log.push(step.value); return { ok: true, message: 'typed S3cret! in the field' }; } } });
@@ -290,13 +352,15 @@ test('triggers start matching workflows with variables filled from the event', a
   throwsCode(() => s.setTrigger(acme, wf.id, { kind: 'inbox', map: { missing: 'subject' } }), 'bad-trigger');
   s.setTrigger(acme, wf.id, { kind: 'inbox', match: 'invoice', map: { po_number: 'subject' } }, null);
   s.setTrigger(globex, other.id, { kind: 'inbox' });
-  assert.deepEqual(s.fireTrigger('inbox', { subject: 'Weather' }, { client: 'acme' }), []);
-  const runs = s.fireTrigger('inbox', { subject: 'Invoice 7731' }, { client: 'acme' });
+  throwsCode(() => s.fireTrigger('inbox', { subject: 'Invoice 1' }), 'bad-trigger');
+  assert.deepEqual(s.fireTrigger('inbox', { subject: 'Invoice 1' }, { clients: [] }), [], 'an event that belongs to nobody starts nothing');
+  assert.deepEqual(s.fireTrigger('inbox', { subject: 'Weather' }, { clients: ['acme'] }), []);
+  const runs = s.fireTrigger('inbox', { subject: 'Invoice 7731' }, { clients: ['acme'] });
   assert.equal(runs.length, 1); await s.whenIdle();
   const r = s.getRun(acme, runs[0].id);
   assert.equal(r.trigger, 'trigger: inbox'); assert.equal(r.values.po_number, 'Invoice 7731');
   assert.equal(r.state, 'passed'); assert.equal(r.values.customer_name, 'Harlow Build');
-  const none = s.fireTrigger('inbox', { subject: 'Invoice 2' }, { client: 'globex' });
+  const none = s.fireTrigger('inbox', { subject: 'Invoice 2' }, { clients: ['globex'] });
   assert.equal(none.length, 1); assert.equal(none[0].state, 'failed', 'the other client\'s trigger ran under its own scope and could not start');
   assert.equal(s.listRuns(acme).length, 1, 'and nothing leaked into acme');
   assert.equal(s.listRuns(globex).length, 1);
@@ -365,6 +429,11 @@ test('agent driver talks to a real HTTP agent: steps, auth, failure, unreachable
     const d = agentDriver({ url, token: 'tok', timeoutMs: 300 });
     const ok = await d.perform({ kind: 'click', target: 'Save', value: '', name: 'n' }, { run: 'r1' });
     assert.equal(ok.ok, true); assert.equal(seen.at(-1).auth, 'Bearer tok'); assert.equal(seen.at(-1).body.step.target, 'Save');
+    await d.perform({ kind: 'click', target: 'Save', value: '', name: 'n', page: 'https://erp.example/po', app: 'Safari' }, { run: 'r1' });
+    assert.equal(seen.at(-1).body.step.page, 'https://erp.example/po'); assert.equal(seen.at(-1).body.step.app, 'Safari');
+    await d.recordStart('rec-1', { app: 'Excel' }); assert.deepEqual([seen.at(-1).url, seen.at(-1).body], ['/record/start', { session: 'rec-1', app: 'Excel' }]);
+    await d.events('rec-1', 3); assert.equal(seen.at(-1).url, '/events?session=rec-1&after=3');
+    await d.recordStop('rec-1'); assert.equal(seen.at(-1).url, '/record/stop');
     assert.equal((await d.perform({ kind: 'click', target: 'gone' })).code, 'target-missing');
     assert.match((await d.perform({ kind: 'click', target: 'slow' })).message, /did not answer/);
     assert.equal((await d.health()).ok, true);

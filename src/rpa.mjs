@@ -22,7 +22,8 @@ const VAR_RE = /^[a-z][a-z0-9_]{0,31}$/i;
 const REF_RE = /\{\{\s*([a-z][a-z0-9_]{0,31})\s*\}\}/gi;
 const SENSITIVE_RE = /(^|[^a-z])(pass(word|code|wd)?|pwd|secret|token|api[-_ ]?key|card( number)?|cvv|cvc|iban|ssn|otp|pin)([^a-z]|$)/i;
 const SHOT_RE = /^data:image\/(png|jpeg|webp|svg\+xml);base64,[A-Za-z0-9+/=]+$/;
-export const MAX_SHOT = 200000;
+export const MAX_SHOT = 1500000;   // a 1280-px JPEG from the desktop agent is ~100–300 KB; this leaves room for a full screen
+const SHOT_EXT = { png: 'png', jpeg: 'jpg', webp: 'webp', 'svg+xml': 'svg' };
 const MASK = '••••';
 
 const cut = (v, n) => String(v ?? '').replace(/[\u0000-\u001f\u007f]/g, ' ').trim().slice(0, n);
@@ -41,8 +42,12 @@ export function isSensitive(ev) {
 export const validShot = (s) => typeof s === 'string' && s.length <= MAX_SHOT && SHOT_RE.test(s);
 export const refsIn = (text) => [...String(text ?? '').matchAll(REF_RE)].map((m) => m[1].toLowerCase());
 
-/** A schematic screenshot (SVG) of a step: used when the recorder or agent supplied no real picture. */
+/**
+ * An illustration (SVG) of a step. Only the seeded demo uses it, to show what a captured screen looks like: the engine
+ * never puts one in place of a missing capture, so a step without a real screenshot says so.
+ */
 export function renderShot(step, state = 'ok') {
+  const FONT = 'ui-sans-serif, -apple-system, SF Pro Text, Segoe UI, sans-serif';
   const esc = (t) => String(t ?? '').replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
   const bad = state === 'failed', wait = state === 'waiting';
   const edge = bad ? '#b32a2a' : wait ? '#8a5200' : '#1b5fc1';
@@ -52,12 +57,12 @@ export function renderShot(step, state = 'ok') {
   const svg = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 200" width="320" height="200">'
     + '<rect width="320" height="200" fill="#f1f6fa"/><rect width="320" height="26" fill="#cfdce7"/>'
     + '<circle cx="14" cy="13" r="4" fill="#566879"/><circle cx="28" cy="13" r="4" fill="#566879"/><circle cx="42" cy="13" r="4" fill="#566879"/>'
-    + '<text x="60" y="17" font-family="sans-serif" font-size="11" fill="#14212e">' + title + '</text>'
+    + '<text x="60" y="18" font-family="' + FONT + '" font-size="12" fill="#14212e">' + title + '</text>'
     + '<rect x="20" y="44" width="150" height="10" rx="3" fill="#cfdce7"/><rect x="20" y="64" width="280" height="10" rx="3" fill="#dbe8f8"/>'
     + '<rect x="20" y="84" width="220" height="10" rx="3" fill="#cfdce7"/><rect x="20" y="104" width="260" height="10" rx="3" fill="#dbe8f8"/>'
     + '<rect x="20" y="134" width="150" height="34" rx="8" fill="#ffffff" stroke="' + edge + '" stroke-width="3"/>'
-    + '<text x="32" y="155" font-family="sans-serif" font-size="12" font-weight="600" fill="#0b1620">' + label + '</text>'
-    + '<text x="20" y="190" font-family="sans-serif" font-size="10" fill="' + edge + '">' + note + '</text></svg>';
+    + '<text x="32" y="155" font-family="' + FONT + '" font-size="12" font-weight="600" fill="#0b1620">' + label + '</text>'
+    + '<text x="20" y="191" font-family="' + FONT + '" font-size="12" fill="' + edge + '">' + note + '</text></svg>';
   return 'data:image/svg+xml;base64,' + Buffer.from(svg).toString('base64');
 }
 
@@ -110,13 +115,14 @@ const sleepAbortable = (ms, signal) => new Promise((resolve) => {
 export class RpaStore {
   /**
    * @param {object} o
-   * @param {string} [o.file]  JSON file to persist to (memory only when omitted)
+   * @param {string} [o.file]  JSON file to persist to (memory only when omitted); screenshots go to `shots/` beside it
    * @param {object|function} o.driver  { perform(step, ctx) -> {ok, message, code?, screenshot?} }, or a function returning one
    * @param {function} [o.settings]  () -> { stepDelayMs, maxRetries, approvalTimeoutMs, builtins: { login_user, login_password } }
    * @param {function} [o.now]
    */
   constructor({ file = null, driver, settings = () => ({}), now = Date.now } = {}) {
     this.file = file; this.driverOf = typeof driver === 'function' ? driver : () => driver; this.settings = settings; this.now = now;
+    this.shotsDir = file ? path.join(path.dirname(file), 'shots') : null;
     this.state = blank();
     this.active = new Map();   // run id -> { abort, stopped, waiter, done }
     if (file) this.#load();
@@ -144,15 +150,39 @@ export class RpaStore {
   }
   #id(prefix) { return prefix + '-' + (this.state.seq++).toString(36); }
   #iso(t = this.now()) { return new Date(t).toISOString(); }
-  #shot(url) { const id = this.#id('shot'); this.state.shots[id] = url; return id; }
+  /** Keep a screenshot: as a file beside the store when it persists (the JSON stays small), else in memory. */
+  #shot(url) {
+    const id = this.#id('shot');
+    const m = /^data:image\/([a-z+]+);base64,(.*)$/s.exec(url);
+    if (this.shotsDir && m) {
+      fs.mkdirSync(this.shotsDir, { recursive: true });
+      const f = id + '.' + (SHOT_EXT[m[1]] || 'img');
+      fs.writeFileSync(path.join(this.shotsDir, f), Buffer.from(m[2], 'base64'));
+      this.state.shots[id] = { f, m: 'image/' + m[1] };
+    } else this.state.shots[id] = url;
+    return id;
+  }
+  #copyShot(id) { const d = this.shotData(id); return d ? this.#shot(d) : null; }
   #prune() {
     const used = new Set();
     for (const w of this.state.workflows) for (const s of w.steps) if (s.shot) used.add(s.shot);
     for (const r of this.state.recordings) for (const s of r.steps) if (s.shot) used.add(s.shot);
     for (const r of this.state.runs) for (const s of r.steps) { if (s.shot) used.add(s.shot); if (s.refShot) used.add(s.refShot); }
-    for (const k of Object.keys(this.state.shots)) if (!used.has(k)) delete this.state.shots[k];
+    for (const k of Object.keys(this.state.shots)) {
+      if (used.has(k)) continue;
+      const v = this.state.shots[k];
+      if (v && typeof v === 'object' && this.shotsDir) fs.rmSync(path.join(this.shotsDir, path.basename(v.f)), { force: true });
+      delete this.state.shots[k];
+    }
   }
-  shotData(id) { return this.state.shots[id] || null; }
+  /** A screenshot as a data URL, or null. */
+  shotData(id) {
+    const v = id ? this.state.shots[id] : null;
+    if (!v) return null;
+    if (typeof v === 'string') return v;
+    if (!this.shotsDir) return null;
+    try { return 'data:' + v.m + ';base64,' + fs.readFileSync(path.join(this.shotsDir, path.basename(v.f))).toString('base64'); } catch { return null; }
+  }
 
   // ---------- scope ----------
   #own(rec, scope) { return scope && (scope.admin === true || (scope.client && rec.client === scope.client)); }
@@ -170,7 +200,7 @@ export class RpaStore {
     if (mine) fail('busy', 'A recording is already running: stop or save it first');
     const rec = {
       id: this.#id('rec'), client: owner, owner: scope.admin ? 'admin' : scope.client, name: cut(name, 80) || 'New recording', app: cut(app, 80),
-      state: 'recording', startedAt: this.#iso(), stoppedAt: null, error: null, steps: [], stats: { events: 0, duplicates: 0, merged: 0, redacted: 0, shotsMissing: 0 }
+      state: 'recording', startedAt: this.#iso(), stoppedAt: null, error: null, steps: [], stats: { events: 0, duplicates: 0, merged: 0, redacted: 0, captured: 0, shotsMissing: 0 }
     };
     this.state.recordings.push(rec);
     if (this.state.recordings.length > 40) this.state.recordings.splice(0, this.state.recordings.length - 40);
@@ -197,9 +227,13 @@ export class RpaStore {
     if (!KINDS.includes(kind)) fail('bad-event', 'Unknown action "' + cut(kind, 20) + '". Use one of: ' + KINDS.join(', '));
     r.stats.events++;
     const at = Number.isFinite(Number(ev.at)) ? Number(ev.at) : this.now();
-    const e = { kind, target: cut(ev.target, 200), value: cut(ev.value, 500), page: cleanPage(ev.page), app: cut(ev.app || r.app, 80), at, field: cut(ev.field, 80), inputType: cut(ev.inputType, 20) };
+    // an action without its own app or page happened where the last app switch or page change left the user
+    const e = { kind, target: cut(ev.target, 200), value: cut(ev.value, 500), page: cleanPage(ev.page), app: cut(ev.app || r.lastApp || r.app, 80), at, field: cut(ev.field, 80), inputType: cut(ev.inputType, 20) };
+    if (!e.page && kind !== 'app' && kind !== 'navigate' && (!ev.app || ev.app === r.lastApp)) e.page = r.lastPage || '';
     if (kind === 'navigate' && !e.page) e.page = cleanPage(e.target || e.value);
+    if (kind === 'app') e.app = cut(ev.app || ev.target, 80) || e.app;
     if (!e.target && !e.value && !e.page && !e.app) fail('bad-event', 'The action has nothing to record: give a target, value, page or app');
+    if (kind === 'navigate' && !e.page) fail('bad-event', 'A page change needs the page address');
     const last = r.steps[r.steps.length - 1];
     // a second identical event within a moment is a double-fire
     if (last && last.kind === kind && last.key === [e.target, e.value, e.page, e.app].join('|') && at - last.at < 800) { r.stats.duplicates++; this.#save(); return { step: clone(last), dropped: 'duplicate' }; }
@@ -211,6 +245,8 @@ export class RpaStore {
       last.value = e.value; last.name = autoName(last); last.key = [last.target, last.value, last.page, last.app].join('|'); last.at = at; r.stats.merged++;
       this.#save(); return { step: clone(last), dropped: 'merged' };
     }
+    if (kind === 'app') { r.lastApp = e.app; r.lastPage = ''; }
+    if (kind === 'navigate') { r.lastPage = e.page; if (ev.app) r.lastApp = e.app; }
     const step = { id: this.#id('st'), kind, name: '', target: e.target, value: e.value, page: e.page, app: e.app, at, secret: false, approval: false, approvalNote: '', optional: false, shot: null, shotNote: '' };
     if (secret) {
       // never keep what was typed into a password-like field: the run asks for it (or reads it from Connections)
@@ -219,11 +255,12 @@ export class RpaStore {
     }
     step.name = autoName(step);
     step.key = [e.target, kind === 'type' && secret ? '' : e.value, e.page, e.app].join('|');
+    // a step only ever shows a real screen capture; when there is none it says why
     if (secret || ev.private === true) { step.shotNote = secret ? 'Screenshot withheld: sensitive field' : 'Screenshot withheld: marked private'; r.stats.redacted += secret ? 0 : 1; }
     else if (ev.screenshot != null && ev.screenshot !== '') {
-      if (validShot(ev.screenshot)) step.shot = this.#shot(ev.screenshot);
-      else { step.shot = this.#shot(renderShot(step)); step.shotNote = 'The screenshot could not be used (wrong type or too large): a schematic was saved instead'; r.stats.shotsMissing++; }
-    } else { step.shot = this.#shot(renderShot(step)); step.shotNote = 'Schematic screenshot (no capture supplied)'; r.stats.shotsMissing++; }
+      if (validShot(ev.screenshot)) { step.shot = this.#shot(ev.screenshot); r.stats.captured++; }
+      else { step.shotNote = 'No screenshot: the capture was not an image or was larger than ' + Math.round(MAX_SHOT / 1e6 * 10) / 10 + ' MB'; r.stats.shotsMissing++; }
+    } else { step.shotNote = cut(ev.shotError, 160) || 'No screenshot: this action came without a screen capture'; r.stats.shotsMissing++; }
     r.steps.push(step);
     this.#save();
     return { step: clone(step), dropped: null };
@@ -273,7 +310,48 @@ export class RpaStore {
       this.#checkRefs(w, s);
     }
     if ('optional' in patch) s.optional = patch.optional === true;
+    if ('page' in patch) {
+      const p = cleanPage(patch.page);
+      if (s.kind === 'navigate' && !p) fail('bad-event', 'A page step needs the page address');
+      if (p && !/^(https?:\/\/|\/|\{\{)/i.test(p)) fail('bad-page', 'Give the page as an address, e.g. https://app.example.com/orders');
+      s.page = p;
+      if (s.kind === 'navigate') s.target = p;
+      this.#checkRefs(w, s);
+    }
+    if ('app' in patch) {
+      const a = cut(patch.app, 80);
+      if (s.kind === 'app' && !a) fail('bad-event', 'An app step needs the app name');
+      s.app = a;
+      if (s.kind === 'app') s.target = a;
+    }
     return this.#touch(w);
+  }
+  /**
+   * Treat what a step types as a secret from now on: the recorded value is dropped (and its screenshot, which may show
+   * it), and the step asks for a secret variable when it runs.
+   */
+  makeSecret(scope, wfId, stepId, name = '') {
+    const w = this.#wf(scope, wfId); const s = this.#step(w, stepId);
+    if (s.secret) fail('secret', 'This step is already kept secret');
+    if (!['type', 'select'].includes(s.kind)) fail('bad-variable', 'Only typing or choosing steps hold a value to keep secret');
+    let n = String(name || '').trim() || slug(s.target || s.name) + '_secret';
+    if (!VAR_RE.test(n)) fail('bad-variable', 'Variable names use letters, numbers and underscores');
+    if (BUILTIN_VARS[n.toLowerCase()]) fail('bad-variable', n + ' is a built-in variable read from Connections');
+    const existing = w.variables.find((v) => v.name.toLowerCase() === n.toLowerCase());
+    if (existing && !existing.secret) fail('bad-variable', 'Variable ' + n + ' already exists and is not secret');
+    if (!existing) w.variables.push({ name: n, label: cut(s.target, 60) || n.replace(/_/g, ' '), default: '', secret: true, required: true });
+    s.secret = true; s.value = '{{' + n + '}}'; delete s.recorded;
+    if (s.shot) { s.shot = null; s.shotNote = 'Screenshot removed: it could show the secret'; }
+    return this.#touch(w);
+  }
+  /** Remove a step's screenshot (it showed something private); the step itself stays. */
+  dropShot(scope, { workflow = null, recording = null } = {}, stepId, by = 'a user') {
+    const owner = workflow ? this.#wf(scope, workflow) : this.#rec(scope, recording);
+    const s = owner.steps.find((x) => x.id === stepId); if (!s) fail('not-found', 'No such step');
+    if (!s.shot) fail('no-shot', 'That step has no screenshot');
+    s.shot = null; s.shotNote = 'Screenshot removed by ' + cut(by, 60);
+    if (workflow) return this.#touch(owner);
+    this.#prune(); this.#save(); return clone(owner);
   }
   #checkRefs(w, s) {
     for (const v of [...refsIn(s.value), ...refsIn(s.target)]) if (!BUILTIN_VARS[v] && !w.variables.find((x) => x.name === v)) fail('unknown-variable', 'Variable {{' + v + '}} is not defined: add it under Variables first');
@@ -287,16 +365,16 @@ export class RpaStore {
     const [s] = w.steps.splice(i, 1); w.steps.splice(j, 0, s);
     return this.#touch(w);
   }
-  addStep(scope, wfId, { kind = 'click', target = '', value = '', name = '', after = null } = {}) {
+  addStep(scope, wfId, { kind = 'click', target = '', value = '', name = '', after = null, page = '', app = '' } = {}) {
     const w = this.#wf(scope, wfId);
     if (!KINDS.includes(kind)) fail('bad-event', 'Unknown action "' + cut(kind, 20) + '"');
-    const s = { id: this.#id('st'), kind, name: '', target: cut(target, 200), value: cut(value, 500), page: '', app: '', secret: false, approval: false, approvalNote: '', optional: false, shot: null, shotNote: 'Added by hand: no screenshot' };
-    if (kind === 'app') s.app = cut(target, 80);
-    if (kind === 'navigate') s.page = cleanPage(target || value);
+    const s = { id: this.#id('st'), kind, name: '', target: cut(target, 200), value: cut(value, 500), page: '', app: '', secret: false, approval: false, approvalNote: '', optional: false, shot: null, shotNote: 'No screenshot: this step was added by hand' };
+    s.app = cut(app, 80); s.page = cleanPage(page);
+    if (kind === 'app') s.app = cut(target || app, 80);
+    if (kind === 'navigate') s.page = cleanPage(target || value || page);
     if (!s.target && !s.value && !s.page && !s.app) fail('bad-event', 'Give the step a target or value');
     s.name = cut(name, 100) || autoName(s);
     this.#checkRefs(w, s);
-    s.shot = this.#shot(renderShot(s));
     const i = after ? w.steps.findIndex((x) => x.id === after) : w.steps.length - 1;
     w.steps.splice(i + 1, 0, s);
     return this.#touch(w);
@@ -310,6 +388,16 @@ export class RpaStore {
     if (w.variables.find((v) => v.name.toLowerCase() === n.toLowerCase())) fail('bad-variable', 'Variable ' + n + ' already exists');
     if (secret === true && def) fail('bad-variable', 'A secret variable cannot have a stored default: it is asked for when the workflow runs');
     w.variables.push({ name: n, label: cut(label, 60) || n.replace(/_/g, ' '), default: secret === true ? '' : cut(def, 200), secret: secret === true, required: !def });
+    return this.#touch(w);
+  }
+  updateVariable(scope, wfId, name, { label, default: def } = {}) {
+    const w = this.#wf(scope, wfId); const v = w.variables.find((x) => x.name.toLowerCase() === String(name || '').toLowerCase());
+    if (!v) fail('not-found', 'No such variable');
+    if (label !== undefined) v.label = cut(label, 60) || v.name.replace(/_/g, ' ');
+    if (def !== undefined) {
+      if (v.secret && def) fail('bad-variable', 'A secret variable cannot have a stored default: it is asked for when the workflow runs');
+      v.default = cut(def, 200); v.required = !v.default;
+    }
     return this.#touch(w);
   }
   removeVariable(scope, wfId, name) {
@@ -348,7 +436,7 @@ export class RpaStore {
     const w = this.#wf(scope, id); const c = clone(w);
     const n = this.#newWorkflow(w.client, cut(name, 80) || w.name + ' (copy)');
     Object.assign(n, { description: c.description, variables: c.variables, scheduleValues: c.scheduleValues, source: w.id });
-    n.steps = c.steps.map((s) => ({ ...s, id: this.#id('st'), shot: s.shot ? this.#shot(this.state.shots[s.shot]) : null }));
+    n.steps = c.steps.map((s) => ({ ...s, id: this.#id('st'), shot: this.#copyShot(s.shot) }));
     this.#save(); return clone(n);
   }
   /** Admin: a copy of a trained workflow for another client. */
@@ -393,13 +481,19 @@ export class RpaStore {
     w.trigger = { kind, match: cut(match, 80), map: m, enabled: enabled !== false }; return this.#touch(w);
   }
   clearTrigger(scope, id) { const w = this.#wf(scope, id); w.trigger = null; return this.#touch(w); }
-  /** An event arrived (a file landed, a message was triaged, a webhook): start every matching workflow. */
-  fireTrigger(source, payload = {}, { client = null } = {}) {
+  /**
+   * An event arrived (a file landed, a message was triaged): start every matching workflow of the clients the event
+   * belongs to. `clients` is required: an event never reaches the workflows of a client it was not meant for, so a
+   * call that does not say whose event it is starts nothing.
+   */
+  fireTrigger(source, payload = {}, { clients = null } = {}) {
+    if (!Array.isArray(clients)) fail('bad-trigger', 'Say which clients this event belongs to');
+    const allowed = new Set(clients.map(String));
     const text = Object.values(payload).filter((x) => typeof x === 'string').join(' ').toLowerCase();
     const started = [];
     for (const w of [...this.state.workflows]) {
       const t = w.trigger;
-      if (!t || t.enabled === false || t.kind !== source || (client && w.client !== client)) continue;
+      if (!t || t.enabled === false || t.kind !== source || !allowed.has(w.client)) continue;
       if (t.match && !text.includes(t.match.toLowerCase())) continue;
       const values = { ...w.scheduleValues };
       for (const [k, key] of Object.entries(t.map)) if (payload[key] !== undefined) values[k] = cut(payload[key], 200);
@@ -444,6 +538,7 @@ export class RpaStore {
       if (v === undefined || v === '') { missing.push(d); continue; }
       values[key] = String(v); if (d.secret) secrets.add(key);
     }
+    for (const s of w.steps) for (const v of refsIn(s.page)) used.add(v);
     for (const u of used) if (!defs.find((d) => d.name.toLowerCase() === u)) missing.push({ name: u, label: u, undefinedVar: true });
     return { values, secrets, missing };
   }
@@ -452,7 +547,7 @@ export class RpaStore {
     const run = {
       id: this.#id('run'), workflowId: w.id, name: w.name, client: w.client, version: w.version, state: 'queued', trigger, by: by || { id: 'system', name: 'System' },
       startedAt: this.#iso(), endedAt: null, error: null, resumeOf: prior ? prior.id : null, values, secretNames: [],
-      steps: w.steps.map((s, i) => ({ id: s.id, idx: i, name: s.name, kind: s.kind, target: s.target, value: s.value, approval: s.approval, approvalNote: s.approvalNote, optional: s.optional, secret: s.secret, state: 'pending', message: '', ms: 0, attempts: 0, refShot: s.shot, shot: null, startedAt: null })),
+      steps: w.steps.map((s, i) => ({ id: s.id, idx: i, name: s.name, kind: s.kind, target: s.target, value: s.value, page: s.page || '', app: s.app || '', approval: s.approval, approvalNote: s.approvalNote, optional: s.optional, secret: s.secret, state: 'pending', message: '', ms: 0, attempts: 0, refShot: s.shot, shot: null, startedAt: null })),
       log: []
     };
     run.steps.slice(0, fromIdx).forEach((s) => { s.state = 'skipped'; s.message = 'Already done in run ' + prior.id; });
@@ -516,7 +611,8 @@ export class RpaStore {
         this.#log(run, 'info', 'Step ' + (i + 1) + ' approved by ' + (decision.by || 'an approver'));
       }
       st.state = 'running'; this.#save();
-      const resolved = { id: st.id, kind: st.kind, name: st.name, target: this.#interpolate(st.target, vals), value: this.#interpolate(st.value, vals), optional: st.optional };
+      // the page and app the step was recorded on travel with it, so the agent acts in the right place
+      const resolved = { id: st.id, kind: st.kind, name: st.name, target: this.#interpolate(st.target, vals), value: this.#interpolate(st.value, vals), page: this.#interpolate(st.page, vals), app: st.app || '', optional: st.optional };
       let result = null;
       for (let attempt = 1; attempt <= 1 + retries; attempt++) {
         st.attempts = attempt;
@@ -526,10 +622,15 @@ export class RpaStore {
         if (result.ok || ctl.stopped) break;
         this.#log(run, 'warn', 'Step ' + (i + 1) + ' attempt ' + attempt + ' failed: ' + (result.message || 'unknown error'));
       }
-      st.ms = this.now() - t0;
-      const picture = validShot(result.screenshot) ? result.screenshot : renderShot({ ...st, app: '' }, result.ok ? 'ok' : 'failed');
-      st.shot = this.#shot(picture);
-      if (ctl.stopped && !result.ok) { st.state = 'stopped'; st.message = 'Stopped by ' + (ctl.stoppedBy || 'a user') + ' during this step'; outcome = 'stopped'; this.#log(run, 'warn', st.message); break; }
+      st.ms = this.now() - t0; st.code = result.ok ? '' : cut(result.code, 40);
+      if (validShot(result.screenshot)) st.shot = this.#shot(result.screenshot);
+      else st.shotNote = result.screenshot ? 'The agent sent a screenshot that was not an image or was too large' : 'The agent sent no screenshot for this step';
+      // Stop wins: a stop that arrived while this step was in flight ends the run as stopped, even if the step passed
+      if (ctl.stopped) {
+        if (result.ok) { st.state = 'passed'; st.message = this.#mask(cut(result.message, 200), ctl.secretValues) || 'Done'; this.#log(run, 'info', 'Step ' + (i + 1) + ' passed: ' + st.name); }
+        else { st.state = 'stopped'; st.message = 'Stopped by ' + (ctl.stoppedBy || 'a user') + ' during this step'; this.#log(run, 'warn', st.message); }
+        outcome = 'stopped'; break;
+      }
       if (result.ok) { st.state = 'passed'; st.message = this.#mask(cut(result.message, 200), ctl.secretValues) || 'Done'; this.#log(run, 'info', 'Step ' + (i + 1) + ' passed: ' + st.name); }
       else if (st.optional) { st.state = 'skipped'; st.message = 'Optional step skipped: ' + this.#mask(cut(result.message, 200), ctl.secretValues); this.#log(run, 'warn', st.message); }
       else {
@@ -540,6 +641,7 @@ export class RpaStore {
       this.#save();
       if (delay && i < run.steps.length - 1) await sleepAbortable(delay, ctl.abort.signal);
     }
+    if (ctl.stopped && outcome === 'passed') outcome = 'stopped';
     for (const s of run.steps) if (s.state === 'pending') { s.state = 'skipped'; s.message = outcome === 'stopped' ? 'Not run: the run was stopped' : outcome === 'failed' ? 'Not run: an earlier step failed' : s.message; }
     run.state = outcome; run.endedAt = this.#iso(); run.ms = this.now() - started;
     this.#log(run, outcome === 'passed' ? 'info' : outcome === 'stopped' ? 'warn' : 'error', 'Run ' + outcome + ' in ' + Math.round(run.ms / 100) / 10 + ' s');
@@ -588,7 +690,14 @@ export class RpaStore {
     const timed = passed.filter((r) => r.ms > 0);
     const labels = [], values = [];
     for (let h = 23; h >= 0; h--) { const lo = now - (h + 1) * 3600000, hi = now - h * 3600000; labels.push(h === 0 ? 'now' : h + 'h'); values.push(runs.filter((r) => { const t = Date.parse(r.startedAt); return t > lo && t <= hi; }).length); }
+    const wfs = this.state.workflows.filter((w) => this.#own(w, scope));
+    const steps = wfs.flatMap((w) => w.steps);
+    const shootable = steps.filter((s) => !s.secret);
     return {
+      steps: steps.length, typed: steps.filter((s) => ['type', 'select'].includes(s.kind)).length, secrets: steps.filter((s) => s.secret).length,
+      bound: steps.filter((s) => !s.secret && refsIn(s.value).length).length, pageChanges: steps.filter((s) => ['navigate', 'app'].includes(s.kind)).length,
+      shots: shootable.filter((s) => s.shot).length, shotCoverage: shootable.length ? Math.round((shootable.filter((s) => s.shot).length / shootable.length) * 100) : 100,
+      approvals: steps.filter((s) => s.approval).length, variables: wfs.reduce((a, w) => a + w.variables.length, 0),
       runs: runs.length, today: runs.filter((r) => Date.parse(r.startedAt) >= today.getTime()).length, passed: passed.length, failed: done.length - passed.length, stopped: runs.filter((r) => r.state === 'stopped').length,
       successRate: done.length ? Math.round((passed.length / done.length) * 100) : 100,
       avgSeconds: timed.length ? Math.round((timed.reduce((a, r) => a + r.ms, 0) / timed.length / 1000) * 10) / 10 : 0,
@@ -621,20 +730,26 @@ export function agentDriver({ url, token = '', fetchImpl = globalThis.fetch, tim
     } finally { clearTimeout(timer); if (signal) signal.removeEventListener('abort', onAbort); }
   };
   return {
-    perform: (step, ctx = {}) => call('POST', '/step', { run: ctx.run, attempt: ctx.attempt, step: { kind: step.kind, target: step.target, value: step.value, name: step.name } }, ctx.signal),
+    perform: (step, ctx = {}) => call('POST', '/step', { run: ctx.run, attempt: ctx.attempt, step: { kind: step.kind, target: step.target, value: step.value, name: step.name, page: step.page || '', app: step.app || '' } }, ctx.signal),
     health: () => call('GET', '/health'),
-    events: (after = 0) => call('GET', '/events?after=' + encodeURIComponent(after))
+    /** Record mode handshake: the agent starts watching the screen for this recording, and stops. */
+    recordStart: (session, { app = '' } = {}) => call('POST', '/record/start', { session, app }),
+    recordStop: (session) => call('POST', '/record/stop', { session }),
+    events: (session, after = 0) => call('GET', '/events?session=' + encodeURIComponent(session) + '&after=' + encodeURIComponent(after))
   };
 }
-/** Simulated driver for the demo and tests: every step passes with a schematic picture, unless `failIf` says otherwise. */
-export function demoDriver({ failIf = null, latencyMs = 0 } = {}) {
+/**
+ * Simulated driver for the demo and tests: every step passes unless `failIf` says otherwise. With `pictures` it sends
+ * an illustration of the step as its screenshot, the way a real agent sends its screen capture.
+ */
+export function demoDriver({ failIf = null, latencyMs = 0, pictures = true } = {}) {
   return {
     perform: async (step, ctx = {}) => {
       if (latencyMs) await sleepAbortable(latencyMs, ctx.signal || new AbortController().signal);
       if (ctx.signal && ctx.signal.aborted) return { ok: false, stopped: true, message: 'Stopped' };
       const why = failIf ? failIf(step, ctx) : null;
-      if (why) return { ok: false, code: 'target-missing', message: typeof why === 'string' ? why : 'Could not find "' + step.target + '" on the page' };
-      return { ok: true, message: 'Simulated: ' + step.name };
+      if (why) return { ok: false, code: 'target-missing', message: typeof why === 'string' ? why : 'Could not find "' + step.target + '" on the page', ...(pictures ? { screenshot: renderShot(step, 'failed') } : {}) };
+      return { ok: true, message: 'Simulated: ' + step.name, ...(pictures ? { screenshot: renderShot(step, 'ok') } : {}) };
     }
   };
 }
