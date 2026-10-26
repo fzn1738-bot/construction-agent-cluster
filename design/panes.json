@@ -45,7 +45,7 @@
       "id": "rpa-typing",
       "title": "Typed inputs",
       "layout": "grid",
-      "composition": "Three count tiles (as recorded / variable / secret), then the full-width list of everything typed, each with its next action, and typing still waiting in unsaved recordings.",
+      "composition": "Three count tiles (as recorded / variable / secret; still three across on phones as compact numbers), then the full-width list of everything typed with a row key under the picker, each with its next action, and typing still waiting in unsaved recordings.",
       "primaryAction": "make-variable",
       "empty": "No step types anything yet."
     },
@@ -61,7 +61,7 @@
       "id": "rpa-screens",
       "title": "Step screenshots",
       "layout": "grid",
-      "composition": "Source picker and coverage bar, then a contact sheet of every step (1/2/3 across); for runs, replayed screen beside the recorded one.",
+      "composition": "Source picker, coverage bar and row key, then a contact sheet of every step (2 across on phones, 2 from 640px, 3 from 1100px); for runs, replayed screen beside the recorded one.",
       "primaryAction": "pick",
       "empty": "No screenshots yet."
     },
@@ -69,7 +69,7 @@
       "id": "rpa-workflows",
       "title": "Workflows",
       "layout": "split",
-      "composition": "Recordings ready to become workflows, the library (client filter for the owner), the chosen workflow's card (rename, describe, duplicate, give a copy to a client, delete, links to editor/order/variables/run, recent runs); rail: Schedule and Trigger, each a plain sentence first with its form folded once set.",
+      "composition": "Recordings ready to become workflows, the library (client filter for the owner), the chosen workflow's card (chips, links to editor/order/variables/run, description, a folded 'Rename, describe, duplicate or delete' form, give a copy to a client, recent runs); rail (sticky from 720px): Schedule and Trigger, chip On/Paused/Off, a plain sentence first with its form folded once set.",
       "primaryAction": "save",
       "empty": "No workflows yet. Record a task, or create an empty workflow below."
     },

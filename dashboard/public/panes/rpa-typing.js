@@ -2,7 +2,7 @@
 // asked on every run / kept secret), each row with what to do next: make it a variable, keep it secret, or type the
 // recorded value again. Tiles count the groups; a card lists typing still waiting in unsaved recordings.
 import { screen, chip, demoBanner, message, chips, bigNumber, updated } from './common.js';
-import { wfPicker, noWorkflows, whereOf, paneLink, text, field } from './rpa-common.js';
+import { colKey, wfPicker, noWorkflows, whereOf, paneLink, text, field } from './rpa-common.js';
 
 const GROUPS = [['all', 'All'], ['plain', 'Typed as recorded'], ['variable', 'Variables'], ['secret', 'Kept secret']];
 const groupOf = (s) => (s.secret ? 'secret' : s.variable ? 'variable' : 'plain');
@@ -45,8 +45,8 @@ const pane = screen((api) => {
   };
   const list = h('section', { class: 'cg-card rpa-wide', 'aria-label': 'Typed inputs' },
     h('div', { class: 'cg-head' }, h('h3', { text: 'What this workflow types' }), chip(h, shown.length + ' shown', '')),
-    h('p', { class: 'cg-note', text: 'Field · Typed · Becomes · Where' }),
     wfPicker(api, d, 'Each customer’s own workflows'),
+    colKey(h, ['Field', 'Typed', 'Becomes', 'Where']),
     chips(h, GROUPS.map(([k, l]) => ({ key: k, label: l, n: k === 'all' ? d.typed.length : d.typed.filter((s) => groupOf(s) === k).length })), group, (k) => { ui.group = k; api.repaint(); }, 'Show'),
     shown.length ? h('ul', { class: 'rpa-inputs' }, shown.map(row)) : h('p', { class: 'cg-note', text: d.typed.length ? 'Nothing in this group.' : 'This workflow does not type or choose anything.' }),
     d.suggestions.length ? h('div', { class: 'rpa-suggest' }, h('p', { class: 'cg-note', text: d.suggestions.length + ' field(s) look like they change every time: ' + d.suggestions.map((x) => x.label).join(', ') + '.' }), h('button', { class: 'btn', type: 'button', disabled: busy || !can, text: 'Make them all variables', onclick: () => api.act('suggest', { workflow: wf }) })) : null,

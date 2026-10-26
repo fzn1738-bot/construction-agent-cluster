@@ -3,7 +3,7 @@
 // skipped). Steps can be added by hand and removed. The rail shows the focused step with its screenshot, so the
 // person renaming "Click 'btnSubmit2'" to "Send the order" can see what it is.
 import { screen, chip, demoBanner, message } from './common.js';
-import { wfPicker, noWorkflows, field, text, select, check, thumb, zoomCard, kindChip, whereOf, paneLink } from './rpa-common.js';
+import { colKey, wfPicker, noWorkflows, field, text, select, check, thumb, zoomCard, kindChip, whereOf, paneLink } from './rpa-common.js';
 
 const KIND_LABEL = { click: 'Click', type: 'Type', select: 'Choose from a list', key: 'Press a key', navigate: 'Open a page', app: 'Switch app' };
 const ticked = (box) => { const el = box.children[0]; return !!el && (el.checked === undefined ? !!(el.attrs && el.attrs.checked != null) : el.checked === true); };
@@ -49,8 +49,8 @@ const pane = screen((api) => {
   const aApp = text(h, 'aapp', 'App, e.g. Safari', '', { maxlength: '80' });
   const list = h('section', { class: 'cg-card', 'aria-label': 'Steps' },
     h('div', { class: 'cg-head' }, h('h3', { text: 'Steps of ' + d.selected.name }), chip(h, d.steps.length + (d.steps.length === 1 ? ' step' : ' steps'), '')),
-    h('p', { class: 'cg-note', text: 'Step · Action · Target · Value' }),
     wfPicker(api, d, 'Version ' + d.selected.version + ' · every save makes a new version'),
+    colKey(h, ['Step', 'Action', 'Target', 'Value']),
     d.steps.length ? h('ol', { class: 'rpa-steps' }, d.steps.map(row)) : h('p', { class: 'cg-note', text: 'No steps yet. Add one below or record the task.' }),
     h('details', { class: 'cg-more' }, h('summary', { text: 'Add a step by hand' }),
       h('form', { class: 'cg-form rpa-grid2', onsubmit: (e) => { e.preventDefault(); api.act('step-add', { workflow: wf, kind: aKind.value, name: aName.value, target: aTarget.value, value: aValue.value, app: aApp.value, after: focus ? focus.id : null }); } },

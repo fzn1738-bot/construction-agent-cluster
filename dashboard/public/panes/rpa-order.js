@@ -3,7 +3,7 @@
 // gate shows where a run stops and waits for a person (with what they should check), and any step can be made one.
 // A band on top says how many steps run and where the run will pause.
 import { screen, chip, demoBanner, message } from './common.js';
-import { wfPicker, noWorkflows, select, text, field, kindChip, whereOf } from './rpa-common.js';
+import { colKey, wfPicker, noWorkflows, select, text, field, kindChip, whereOf } from './rpa-common.js';
 
 const pane = screen((api) => {
   const { ctx, d, ui, h } = api;
@@ -47,7 +47,7 @@ const pane = screen((api) => {
     return item;
   };
   const flow = h('section', { class: 'cg-card', 'aria-label': 'Steps in replay order' },
-    h('p', { class: 'cg-note', text: '# · Step · Where · Checkpoint' }),
+    colKey(h, ['#', 'Step', 'Where', 'Checkpoint']),
     n ? h('ol', { class: 'rpa-flow' }, h('li', { class: 'rpa-flowend', 'aria-hidden': 'true', text: 'Start' }), d.steps.map(node), h('li', { class: 'rpa-flowend', 'aria-hidden': 'true', text: 'Done' }))
       : h('p', { class: 'cg-note', text: 'This workflow has no steps yet.' }),
     can && n > 1 ? h('p', { class: 'cg-note', text: 'Drag a step onto another to put it there, or use the arrows and the position list.' }) : null);

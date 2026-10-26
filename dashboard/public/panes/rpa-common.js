@@ -93,6 +93,10 @@ export function wfPicker(api, d, hint) {
   sel.addEventListener('change', () => api.act('select', { id: sel.value }, { quiet: true }));
   return h('div', { class: 'rpa-picker' }, field(h, 'Workflow', sel, hint));
 }
+/** What each row of a list holds, as a quiet key under the picker (the cards themselves carry no column headers). */
+export function colKey(h, cols) {
+  return h('p', { class: 'rpa-colkey' }, h('span', { class: 'rpa-colkey-l', text: 'Each row' }), cols.map((c) => h('span', { text: c })));
+}
 /** A link to another workflow screen. */
 export const paneLink = (h, id, label) => h('a', { class: 'linkbtn', href: '#/pane/' + id, text: label });
 /** What a workflow screen shows before there is any workflow. */

@@ -3,7 +3,7 @@
 // see. A coverage bar says how many steps have a real capture, how many were withheld on purpose and how many have
 // none (each says why). A screenshot that shows something private can be removed; the step stays.
 import { screen, chip, demoBanner, message, chips } from './common.js';
-import { select, stateWord, zoomCard, kindChip, STATE_WORD } from './rpa-common.js';
+import { colKey, select, stateWord, zoomCard, kindChip, STATE_WORD } from './rpa-common.js';
 
 const KINDS = [['workflow', 'Workflows'], ['recording', 'Recordings'], ['run', 'Runs']];
 
@@ -25,10 +25,10 @@ const pane = screen((api) => {
     h('i', { class: 'rpa-cover-ok rpa-w' + pct(cov.captured) }), h('i', { class: 'rpa-cover-held rpa-w' + pct(cov.withheld) }), h('i', { class: 'rpa-cover-none rpa-w' + pct(cov.missing) }));
   const head = h('section', { class: 'cg-card rpa-sheethead', 'aria-label': 'Choose screenshots' },
     h('div', { class: 'cg-head' }, h('h3', { text: src ? src.name : 'Screenshots' }), chip(h, cov.pct + '% captured', cov.missing ? 'warn' : 'ok')),
-    h('p', { class: 'cg-note', text: 'Step · Screenshot · Recorded · Note' }),
     chips(h, KINDS.map(([k, l]) => ({ key: k, label: l, n: k === 'workflow' ? d.sources.workflows.length : k === 'recording' ? d.sources.recordings.length : d.sources.runs.length })), kind, (k) => { ui.kind = k; const first = k === 'workflow' ? d.sources.workflows[0] : k === 'recording' ? d.sources.recordings[0] : d.sources.runs[0]; if (first) api.act('pick', { kind: k, id: first.id }, { quiet: true }); else api.repaint(); }, 'Screenshots of'),
     which ? h('label', { class: 'rpa-field' }, h('span', { text: KINDS.find(([k]) => k === kind)[1].replace(/s$/, '') }), which) : h('p', { class: 'cg-note', text: 'None yet.' }),
     cov.total ? meter : null,
+    colKey(h, ['Step', 'Screenshot', 'Recorded', 'Note']),
     cov.total ? h('div', { class: 'cg-top-chips' }, chip(h, cov.captured + ' captured', 'ok'), chip(h, cov.withheld + ' withheld', cov.withheld ? 'warn' : ''), chip(h, cov.missing + ' without a screenshot', cov.missing ? 'bad' : '')) : null,
     message(h, ui));
 
