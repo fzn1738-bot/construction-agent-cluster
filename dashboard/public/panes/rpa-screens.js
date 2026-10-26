@@ -47,7 +47,7 @@ const pane = screen((api) => {
   const sheet = d.frames.length ? h('ol', { class: 'rpa-sheet', 'aria-label': 'Screenshots, step by step' }, d.frames.map(frame))
     : h('section', { class: 'cg-card' }, h('p', { class: 'cg-note', text: src ? 'This has no steps yet.' : 'No recordings, workflows or runs yet. Record a task to see its screenshots here.' }));
 
-  return h('div', { class: 'cg-pane' }, demoBanner(ctx, d), zoomCard(h, ui.zoom, () => { ui.zoom = null; api.repaint(); }), head, sheet);
+  return h('div', { class: 'cg-pane rpa-pane' }, demoBanner(ctx, d), zoomCard(h, ui.zoom, () => { ui.zoom = null; api.repaint(); }), head, sheet);
 });
 
 export function render(root, ctx) { return pane.render(root, ctx); }

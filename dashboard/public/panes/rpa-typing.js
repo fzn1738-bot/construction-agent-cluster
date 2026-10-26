@@ -9,7 +9,7 @@ const groupOf = (s) => (s.secret ? 'secret' : s.variable ? 'variable' : 'plain')
 
 const pane = screen((api) => {
   const { ctx, d, ui, h } = api;
-  if (!d.selected) return h('div', { class: 'cg-pane' }, demoBanner(ctx, d), noWorkflows(h, 'the values each workflow types'));
+  if (!d.selected) return h('div', { class: 'cg-pane rpa-pane' }, demoBanner(ctx, d), noWorkflows(h, 'the values each workflow types'));
   const busy = !!ui.busy, can = !!ctx.me.canRun;
   const wf = d.selected.id;
   const sum = d.summary;
@@ -58,7 +58,7 @@ const pane = screen((api) => {
     h('ul', { class: 'cg-plain' }, d.pending.map((p) => h('li', { class: 'cg-rule' }, h('span', { class: 'cg-rule-main' }, h('b', { text: p.target || 'A field' }), h('small', { text: p.recording })), p.secret ? chip(h, 'Redacted', 'warn') : chip(h, 'Kept', '')))),
     h('div', { class: 'cg-actions' }, paneLink(h, 'rpa-workflows', 'Turn a recording into a workflow'))) : null;
 
-  return h('div', { class: 'cg-pane' }, demoBanner(ctx, d), tiles, list, pending);
+  return h('div', { class: 'cg-pane rpa-pane' }, demoBanner(ctx, d), tiles, list, pending);
 });
 
 export function render(root, ctx) { return pane.render(root, ctx); }

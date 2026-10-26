@@ -33,11 +33,21 @@ export function thumb(h, src, alt, onOpen, note) {
   return onOpen ? h('button', { class: 'rpa-thumb', type: 'button', 'aria-label': 'Enlarge screenshot: ' + alt, onclick: onOpen }, img) : img;
 }
 /** The enlarged screenshot card with a close button. */
+let zoomShown = null;   // the screenshot last brought into view, so live refreshes do not keep scrolling to it
 export function zoomCard(h, zoom, close) {
-  if (!zoom || !zoom.src) return null;
-  return h('section', { class: 'cg-card rpa-zoom', 'aria-label': 'Screenshot' },
-    h('div', { class: 'cg-head' }, h('h3', { text: zoom.title || 'Screenshot' }), h('button', { class: 'linkbtn', type: 'button', text: 'Close', onclick: close })),
+  if (!zoom || !zoom.src) { zoomShown = null; return null; }
+  const card = h('section', { class: 'cg-card rpa-zoom', 'aria-label': 'Screenshot', tabindex: '-1' },
+    h('div', { class: 'cg-head' }, h('h3', { text: zoom.title || 'Screenshot' }), h('button', { class: 'btn', type: 'button', text: 'Close', onclick: () => { zoomShown = null; close(); } })),
     h('img', { class: 'rpa-shot-big', src: zoom.src, alt: zoom.title || 'Screenshot' }));
+  // the card opens at the top of the screen; a thumbnail pressed far down a list brings it into view once
+  if (zoomShown !== zoom.src) {
+    zoomShown = zoom.src;
+    try {
+      const still = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+      requestAnimationFrame(() => { if (card.isConnected && card.getBoundingClientRect().top < 0) { card.scrollIntoView({ block: 'start', behavior: still ? 'auto' : 'smooth' }); card.focus({ preventScroll: true }); } });
+    } catch { /* no window: nothing to scroll */ }
+  }
+  return card;
 }
 
 export const KIND_WORD = { click: 'Click', type: 'Type', select: 'Choose', key: 'Key', navigate: 'Page', app: 'App' };

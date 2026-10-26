@@ -7,7 +7,7 @@ import { wfPicker, noWorkflows, select, text, field, kindChip, whereOf } from '.
 
 const pane = screen((api) => {
   const { ctx, d, ui, h } = api;
-  if (!d.selected) return h('div', { class: 'cg-pane' }, demoBanner(ctx, d), noWorkflows(h, 'their replay order'));
+  if (!d.selected) return h('div', { class: 'cg-pane rpa-pane' }, demoBanner(ctx, d), noWorkflows(h, 'their replay order'));
   const busy = !!ui.busy, can = !!ctx.me.canRun;
   const wf = d.selected.id;
   const n = d.steps.length;
@@ -52,7 +52,7 @@ const pane = screen((api) => {
       : h('p', { class: 'cg-note', text: 'This workflow has no steps yet.' }),
     can && n > 1 ? h('p', { class: 'cg-note', text: 'Drag a step onto another to put it there, or use the arrows and the position list.' }) : null);
 
-  return h('div', { class: 'cg-pane' }, demoBanner(ctx, d), band, flow);
+  return h('div', { class: 'cg-pane rpa-pane' }, demoBanner(ctx, d), band, flow);
 });
 
 export function render(root, ctx) { return pane.render(root, ctx); }

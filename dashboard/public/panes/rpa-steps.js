@@ -10,7 +10,7 @@ const ticked = (box) => { const el = box.children[0]; return !!el && (el.checked
 
 const pane = screen((api) => {
   const { ctx, d, ui, h } = api;
-  if (!d.selected) return h('div', { class: 'cg-pane' }, demoBanner(ctx, d), noWorkflows(h, 'their steps'));
+  if (!d.selected) return h('div', { class: 'cg-pane rpa-pane' }, demoBanner(ctx, d), noWorkflows(h, 'their steps'));
   const busy = !!ui.busy, can = !!ctx.me.canRun;
   const wf = d.selected.id;
   const focus = d.focus;
@@ -69,7 +69,7 @@ const pane = screen((api) => {
     h('section', { class: 'cg-card' }, h('h3', { text: 'Also for this workflow' }), h('ul', { class: 'cg-plain' },
       h('li', {}, paneLink(h, 'rpa-order', 'Change the order and approval checkpoints')), h('li', {}, paneLink(h, 'rpa-variables', 'Variables such as customer name or PO number')), h('li', {}, paneLink(h, 'rpa-screens', 'All its screenshots')))));
 
-  return h('div', { class: 'cg-pane' }, demoBanner(ctx, d), zoomCard(h, ui.zoom, () => { ui.zoom = null; api.repaint(); }), h('div', { class: 'cg-split' }, h('div', { class: 'cg-main' }, list), rail));
+  return h('div', { class: 'cg-pane rpa-pane' }, demoBanner(ctx, d), zoomCard(h, ui.zoom, () => { ui.zoom = null; api.repaint(); }), h('div', { class: 'cg-split' }, h('div', { class: 'cg-main' }, list), rail));
 });
 
 export function render(root, ctx) { return pane.render(root, ctx); }

@@ -612,7 +612,57 @@
 /* variables */
 .rpa-vargrid { display: grid; gap: 16px; grid-template-columns: minmax(0, 1fr); }
 @media (min-width: 720px) { .rpa-vargrid { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
-@media (min-width: 1100px) { .rpa-vargrid { grid-template-columns: repeat(3, minmax(0, 1fr)); } }
+.rpa-vargrid > .rpa-varcard:only-child { grid-column: 1 / -1; }
 .rpa-varcard.is-secret { border-left: 4px solid var(--warn); }
 .rpa-varcard small { color: var(--ink-3); font-size: 12px; }
 @media (prefers-reduced-motion: reduce) { .rpa-dot, .rpa-dots .rpa-d-running { animation: none; } .rpa-focus { position: static; } }
+
+/* ---------- design pass T-153 r1 ---------- */
+/* Overview: workflow automation as a Record → Build → Run pipeline under the outcome buttons */
+.cg-pipe { display: grid; gap: 12px; padding: 16px; border-radius: 16px; background: var(--surface); border: 1px solid var(--rule); box-shadow: var(--shadow); min-width: 0; }
+.cg-pipe-title { margin: 0; font: 650 16px var(--sans); letter-spacing: -0.01em; color: var(--strong); }
+.cg-pipe-cols { display: grid; gap: 16px; grid-template-columns: minmax(0, 1fr); counter-reset: none; }
+@media (min-width: 1100px) { .cg-pipe-cols { grid-template-columns: repeat(auto-fit, minmax(0, 1fr)); gap: 24px; } .cg-pipe-col + .cg-pipe-col { position: relative; } .cg-pipe-col + .cg-pipe-col::before { content: "→"; position: absolute; left: -18px; top: 6px; color: var(--accent); font: 650 14px var(--sans); } }
+.cg-pipe-col { display: grid; gap: 8px; align-content: start; min-width: 0; }
+.cg-pipe-head { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; gap: 10px; align-items: center; }
+.cg-pipe-head > span:nth-child(2) { display: grid; min-width: 0; }
+.cg-pipe-head b { color: var(--strong); font: 650 14px var(--sans); }
+.cg-pipe-head small { color: var(--ink-3); font-size: 12px; }
+.cg-pipe-n { width: 28px; height: 28px; border-radius: 50%; display: grid; place-items: center; font: 650 12px var(--sans); color: var(--accent); background: var(--accent-soft); }
+.cg-pipe .cg-hero-legend.is-tools { grid-template-columns: minmax(0, 1fr); gap: 6px; }
+@media (min-width: 560px) and (max-width: 1099px) { .cg-pipe .cg-hero-legend.is-tools { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+.cg-pipe .cg-node { min-height: 48px; padding: 6px 10px; }
+.cg-pipe .cg-node i { width: 28px; height: 28px; font-size: 14px; }
+.cg-pipe .cg-node-num b { font-size: 16px; }
+.cg-pipe .cg-node-num small { display: none; }
+@media (min-width: 1180px) { .cg-pipe .cg-hero-legend .cg-node { flex-wrap: nowrap; align-items: center; padding: 6px 10px; } .cg-pipe .cg-hero-legend .cg-node-num { flex: 0 0 auto; display: grid; padding-left: 0; } .cg-pipe .cg-hero-legend .cg-node-num b { font-size: 16px; } }
+
+/* Apps & pages: long page addresses wrap instead of pushing the phone screen sideways */
+.rpa-stops > *, .rpa-stopcard .cg-head > * { min-width: 0; }
+.rpa-stopcard h3, .rpa-mini li > span { overflow-wrap: anywhere; min-width: 0; }
+.rpa-mini li > span:not(.cg-chip):not(.cg-state):not(.rpa-mini-n) { flex: 1 1 0; }
+
+/* Workflow screens on phones: each table row becomes a compact card. The first cell (the name) spans the row
+   without a label, the rest sit up to three across with their label above, so a row is three short lines, not eight */
+@media (max-width: 639px) {
+  .rpa-pane .cg-records tr { display: grid; grid-template-columns: repeat(auto-fit, minmax(96px, 1fr)); gap: 8px 12px; padding: 12px 0; }
+  .rpa-pane .cg-records td { grid-template-columns: minmax(0, 1fr); gap: 2px; padding: 0; }
+  .rpa-pane .cg-records td:first-child { grid-column: 1 / -1; }
+  .rpa-pane .cg-records td:first-child::before { display: none; }
+}
+
+/* Run history: the details rail stays in view beside a long list; on phones it comes first */
+.rpa-looklist .cg-rule-main { display: grid; gap: 2px; justify-items: start; min-width: 0; }
+.rpa-looklist small { font-size: 12px; overflow-wrap: anywhere; }
+.rpa-looklist li { padding: 8px 0; border-top: 1px solid var(--rule); }
+.rpa-looklist li:first-child { border-top: 0; padding-top: 0; }
+@media (min-width: 720px) { .rpa-pane .cg-split > .rpa-detail { position: sticky; top: 16px; max-height: calc(100vh - 32px); overflow-y: auto; } }
+@media (max-width: 719px) { .rpa-pane .cg-split > .rpa-detail { order: -1; } }
+/* the enlarged screenshot: marked as the thing in focus, never wider than its card */
+.rpa-zoom { border: 2px solid var(--accent); scroll-margin-top: 16px; }
+.rpa-zoom:focus { outline: none; }
+.rpa-zoom .rpa-shot-big { max-width: 100%; }
+/* Workflows rail: the schedule and trigger read as a sentence first; their forms fold away once set */
+.rpa-when { margin: 0; display: grid; gap: 2px; padding: 12px; border-radius: 12px; background: var(--surface-2); border: 1px solid var(--rule); }
+.rpa-when b { color: var(--strong); font-weight: 650; font-size: 16px; }
+.rpa-when small { color: var(--ink-2); font-size: 12px; }

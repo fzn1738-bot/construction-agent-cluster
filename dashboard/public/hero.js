@@ -5,9 +5,27 @@
 
 const GLYPH = { ok: '✓', warn: '!', bad: '✕', idle: '–' };
 const STATE_WORD = { ok: 'Healthy', warn: 'Needs a look', bad: 'Failing', idle: 'Waiting for setup' };
-const SHORT = { documents: 'Documents', transfers: 'Transfers', inbox: 'Inbox', 'activity-log': 'Record' };
+const SHORT = { documents: 'Documents', transfers: 'Transfers', inbox: 'Inbox', 'activity-log': 'Activity' };
 export const OUTCOME_IDS = Object.keys(SHORT);
 const isOutcome = (p) => OUTCOME_IDS.includes(p.id);
+// Workflow automation as one pipeline round the core: Record (9 o'clock) → Build (12) → Run (3), read clockwise.
+// Angles grow clockwise on the canvas, so the pipeline runs from π to 2π. Any other cross-outcome tab sits at
+// 6 o'clock under "More".
+const PHASES = [
+  { key: 'record', label: 'Record', a: Math.PI, ids: ['rpa-record', 'rpa-typing', 'rpa-pages', 'rpa-screens'] },
+  { key: 'build', label: 'Build', a: Math.PI * 1.5, ids: ['rpa-workflows', 'rpa-steps', 'rpa-order', 'rpa-variables'] },
+  { key: 'run', label: 'Run', a: Math.PI * 2, ids: ['rpa-run', 'rpa-history'] }
+];
+const PHASE_HINT = { record: 'Watch a task once', build: 'Edit, order, add variables', run: 'Replay, approve, review', more: 'Across the outcomes' };
+const RANK = { bad: 3, warn: 2, idle: 1, ok: 0 };
+const worst = (list) => list.reduce((w, p) => (RANK[stateOf(p)] > RANK[w] ? stateOf(p) : w), 'ok');
+/** The non-outcome tabs grouped into pipeline phases, in pipeline order; leftovers go to "More". */
+function phasesOf(tools) {
+  const out = PHASES.map((ph) => ({ ...ph, panes: ph.ids.map((id) => tools.find((p) => p.id === id)).filter(Boolean) }));
+  const rest = tools.filter((p) => !PHASES.some((ph) => ph.ids.includes(p.id)));
+  if (rest.length) out.push({ key: 'more', label: 'More', a: Math.PI / 2, panes: rest });
+  return out.filter((ph) => ph.panes.length);
+}
 const isDemo = (ctx, p) => !!(ctx.demo || (p.state && p.state.demo));
 const SANS = 'ui-sans-serif, -apple-system, "SF Pro Text", "Segoe UI", sans-serif';
 const MONO = 'ui-monospace, "SF Mono", Menlo, monospace';
@@ -56,11 +74,22 @@ function layout(w, h, n, m) {
   const ringR = small ? Math.min(w * 0.36, h * 0.36) : Math.min(h * 0.36, w * 0.3);
   // outcomes sit on the diagonals, clear of the captions at 9, 3 and 6 o'clock
   const nodes = Array.from({ length: n }, (_, i) => { const a = -Math.PI / 2 + (i * 2 * Math.PI) / Math.max(n, 1) + Math.PI / Math.max(n, 1); return { x: cx + Math.cos(a) * ringR, y: cy + Math.sin(a) * ringR, a }; }).map((nd) => ({ ...nd, x: cx + Math.cos(nd.a) * ringR * (small ? 1 : 1.6) }));
-  // beads for the cross-outcome tabs on the inner survey ring, nudged off the outcome links
+  // beads for the cross-outcome tabs on the inner survey ring, grouped by pipeline phase between the outcome links
   const beadR = Math.min(R * 1.6, ringR * 0.78);
-  const near = (a) => nodes.some((nd) => Math.abs(Math.atan2(Math.sin(a - nd.a), Math.cos(a - nd.a))) < 0.21);
-  const beads = Array.from({ length: m }, (_, i) => { let a = -Math.PI / 2 + ((i + 0.5) * 2 * Math.PI) / Math.max(m, 1); if (near(a)) a += 0.26; return { x: cx + Math.cos(a) * beadR, y: cy + Math.sin(a) * beadR, a }; });
-  return { cx, cy, R, ringR, nodes, beads, beadR, node: small ? 18 : 22, bead: small ? 9 : 10, small };
+  const beads = []; const arcs = [];
+  // each phase spreads its beads only as far as the nearest outcome link allows (links run flatter on wide stages)
+  const linkA = nodes.map((nd) => Math.atan2(nd.y - cy, nd.x - cx));
+  const gap = (a, b) => Math.abs(Math.atan2(Math.sin(a - b), Math.cos(a - b)));
+  const bead = small ? 9 : 10, clear = (bead + 6) / beadR;
+  for (const ph of m) {
+    const k = ph.panes.length;
+    const room = linkA.length ? Math.min(...linkA.map((la) => gap(ph.a, la))) - clear : Math.PI / 3;
+    const step = Math.max((bead * 2 + 4) / beadR, Math.min(0.28, (2 * room) / (k + 0.1)));
+    const first = ph.a - ((k - 1) / 2) * step;
+    ph.panes.forEach((p, j) => { const a = first + j * step; beads.push({ x: cx + Math.cos(a) * beadR, y: cy + Math.sin(a) * beadR, a, p }); });
+    arcs.push({ ph, a0: first - step * 0.55, a1: first + (k - 1) * step + step * 0.55 });
+  }
+  return { cx, cy, R, ringR, nodes, beads, arcs, beadR, node: small ? 18 : 22, bead, small };
 }
 function roundSquare(c, half, r) { c.beginPath(); c.moveTo(-half + r, -half); c.arcTo(half, -half, half, half, r); c.arcTo(half, half, -half, half, r); c.arcTo(-half, half, -half, -half, r); c.arcTo(-half, -half, half, -half, r); c.closePath(); }
 // the point where a link from the core to a node starts and ends
@@ -70,7 +99,7 @@ function draw(state, t) {
   const { ctx: c, w, h, ctxData: d, pal } = state;
   const panes = (d.panes || []).filter(isOutcome);
   const tools = (d.panes || []).filter((p) => !isOutcome(p));
-  const L = layout(w, h, panes.length, tools.length);
+  const L = layout(w, h, panes.length, phasesOf(tools));
   state.L = L;
   c.clearRect(0, 0, w, h);
   const moving = !state.still;
@@ -150,7 +179,12 @@ function draw(state, t) {
   c.font = '700 ' + Math.round(Math.min(44, R * 0.5)) + 'px ' + SANS; c.fillText(big, L.cx, L.cy - R * 0.12);
   c.fillStyle = pal.dark ? 'rgb(' + rgb + ')' : pal.ink; c.font = '650 ' + Math.round(Math.max(12, Math.min(16, R * 0.18))) + 'px ' + SANS;
   c.fillText((d.status && d.status.headline) || 'Ready', L.cx, L.cy + R * 0.3);
-  c.fillStyle = pal.ink2; c.font = '12px ' + SANS; c.fillText(rate ? rate.label : d.status && d.status.primary ? d.status.primary.label : '', L.cx, L.cy + R * 0.56);
+  // the label under the number stays inside the orb: drop leading words until it fits the chord at that height
+  c.fillStyle = pal.ink2; c.font = '12px ' + SANS;
+  let sub = String(rate ? rate.label : d.status && d.status.primary ? d.status.primary.label : '');
+  const chord = 2 * Math.sqrt(1 - 0.56 * 0.56) * R - 8;
+  while (c.measureText(sub).width > chord && sub.includes(' ')) { sub = sub.slice(sub.indexOf(' ') + 1); sub = sub[0].toUpperCase() + sub.slice(1); }
+  c.fillText(sub, L.cx, L.cy + R * 0.56);
 
   // outcome nodes: state colour plus a glyph; demo nodes are outlined and dashed, with the same glyph
   panes.forEach((p, i) => {
@@ -180,14 +214,55 @@ function draw(state, t) {
     if (sub) { c.fillStyle = pal.ink2; c.font = '12px ' + SANS; c.fillText(sub, lx, ly + 16); }
   });
 
-  // beads: one per cross-outcome tab, state colour plus glyph (dashed for demo data)
-  tools.forEach((p, i) => {
-    const b = L.beads[i]; const s = stateOf(p); const col = s === 'idle' ? pal.idle : pal[s]; const dm = isDemo(d, p);
+  // the automation pipeline: a faint guide from Record round to Run, a soft track under each phase, and a packet
+  // that travels the pipeline (it stands still when the phase it is in is failing, and under reduced motion)
+  if (L.arcs.length) {
+    const pipe = L.arcs.filter((a) => a.ph.key !== 'more');
+    if (pipe.length > 1) {
+      const g0 = pipe[0].a0, end = pipe[pipe.length - 1].a1;
+      c.save(); c.strokeStyle = pal.accent; c.globalAlpha = 0.35; c.lineWidth = 1; c.setLineDash([1, 5]);
+      c.beginPath(); c.arc(L.cx, L.cy, L.beadR, g0, end); c.stroke(); c.restore();
+      // arrowheads between phases, on the guide just before each next phase starts
+      for (let i = 1; i < pipe.length; i++) {
+        const a = pipe[i].a0 - 0.05; const x = L.cx + Math.cos(a) * L.beadR, y = L.cy + Math.sin(a) * L.beadR;
+        c.save(); c.translate(x, y); c.rotate(a + Math.PI / 2); c.fillStyle = pal.accent; c.globalAlpha = 0.7;
+        c.beginPath(); c.moveTo(4, 0); c.lineTo(-3, -4); c.lineTo(-3, 4); c.closePath(); c.fill(); c.restore();
+      }
+      const flowing = moving && worst(tools) !== 'bad';
+      const u = flowing ? (sec / 9) % 1 : 0.5;
+      const a = g0 + (end - g0) * u;
+      c.save(); c.fillStyle = 'rgb(' + rgb + ')'; c.shadowColor = 'rgb(' + rgb + ' / 0.6)'; c.shadowBlur = 8;
+      c.beginPath(); c.arc(L.cx + Math.cos(a) * L.beadR, L.cy + Math.sin(a) * L.beadR, 3.5, 0, Math.PI * 2); c.fill(); c.restore();
+    }
+    L.arcs.forEach(({ ph, a0, a1 }) => {
+      const s = worst(ph.panes);
+      c.save(); c.lineCap = 'round'; c.strokeStyle = s === 'bad' || s === 'warn' ? pal[s] : pal.soft; c.globalAlpha = s === 'bad' || s === 'warn' ? 0.18 : (pal.dark ? 0.35 : 0.9);
+      c.lineWidth = L.bead * 2 + 8; c.beginPath(); c.arc(L.cx, L.cy, L.beadR, a0, a1); c.stroke(); c.restore();
+      // phase label just outside its track, kept inside the stage
+      // word then state glyph, e.g. "BUILD ✓"; anchored away from the core and clamped inside the stage
+      const lr = L.beadR + L.bead + (L.small ? 10 : 14);
+      const cosA = Math.cos(ph.a), sinA = Math.sin(ph.a);
+      const word = ph.label.toUpperCase() + ' ';
+      c.save(); c.font = '650 12px ' + SANS; c.textBaseline = 'middle'; c.textAlign = 'left';
+      const ww = c.measureText(word).width, gw = c.measureText(GLYPH[s]).width, tw = ww + gw;
+      const ax = L.cx + cosA * lr, ay = L.cy + sinA * lr + (Math.abs(sinA) > 0.5 ? sinA * 4 : 0);
+      let x0 = cosA < -0.5 ? ax - tw : cosA > 0.5 ? ax : ax - tw / 2;
+      x0 = Math.max(6, Math.min(w - tw - 6, x0));
+      const y0 = Math.max(10, Math.min(h - 10, ay));
+      c.fillStyle = pal.ink2; c.fillText(word, x0, y0);
+      c.fillStyle = s === 'idle' ? pal.idle : pal[s]; c.fillText(GLYPH[s], x0 + ww, y0);
+      c.restore();
+    });
+  }
+
+  // beads: one per cross-outcome tab, state colour plus glyph (white with a dashed outline for demo data)
+  L.beads.forEach((b) => {
+    const p = b.p; const s = stateOf(p); const col = s === 'idle' ? pal.idle : pal[s]; const dm = isDemo(d, p);
     c.save(); c.translate(b.x, b.y); roundSquare(c, L.bead, 5);
-    if (dm) { c.fillStyle = pal.soft; c.fill(); c.setLineDash([3, 2]); c.strokeStyle = pal.accent; }
+    if (dm) { c.fillStyle = pal.surface; c.fill(); c.setLineDash([3, 2]); c.strokeStyle = col; }
     else { c.fillStyle = s === 'idle' ? pal.surface : col; c.fill(); c.strokeStyle = col; }
     c.lineWidth = 1.5; c.stroke(); c.setLineDash([]);
-    c.fillStyle = dm ? pal.accent : s === 'idle' ? col : pal.surface; c.font = '700 12px ' + SANS; c.textAlign = 'center'; c.textBaseline = 'middle';
+    c.fillStyle = dm || s === 'idle' ? col : pal.surface; c.font = '700 12px ' + SANS; c.textAlign = 'center'; c.textBaseline = 'middle';
     c.fillText(GLYPH[s], 0, 1); c.restore();
   });
 
@@ -228,16 +303,28 @@ function legend(ctx) {
   const { h } = ctx;
   const metricOf = (p) => (ctx.metrics || []).find((m) => m.pane === p.id);
   const item = (p) => {
-    const s = stateOf(p); const dm = isDemo(ctx, p); const m = isOutcome(p) ? metricOf(p) : null;
+    const s = stateOf(p); const dm = isDemo(ctx, p); const m = metricOf(p);
     return h('li', {}, h('button', { type: 'button', class: 'cg-node ' + s + (dm ? ' is-demo' : '') + (isOutcome(p) ? '' : ' is-tool'), 'aria-label': 'Open ' + p.title + ': ' + (STATE_WORD[s] || '') + (dm ? ', demo data' : ''), onclick: () => ctx.go('pane/' + p.id) },
       h('i', { 'aria-hidden': 'true', text: GLYPH[s] }),
       h('span', { class: 'cg-node-main' }, h('b', { text: p.title }), h('small', { text: (dm ? 'Demo data · ' : '') + (STATE_WORD[s] || '') + (p.state && p.state.text ? ' · ' + stateText(p) : '') })),
       m ? h('span', { class: 'cg-node-num' }, h('b', { text: fmtVal(m.value) + (m.unit && /%/.test(m.unit) ? '%' : '') }), h('small', { text: m.label })) : null));
   };
   const outs = (ctx.panes || []).filter(isOutcome), tools = (ctx.panes || []).filter((p) => !isOutcome(p));
+  const phases = phasesOf(tools);
+  const automation = phases.length ? h('section', { class: 'cg-pipe', 'aria-label': 'Workflow automation' },
+    h('h2', { class: 'cg-pipe-title', text: 'Workflow automation' }),
+    h('div', { class: 'cg-pipe-cols' }, phases.map((ph, i) => {
+      const s = worst(ph.panes);
+      return h('section', { class: 'cg-pipe-col', 'aria-label': ph.label },
+        h('div', { class: 'cg-pipe-head' },
+          h('span', { class: 'cg-pipe-n', 'aria-hidden': 'true', text: ph.key === 'more' ? '+' : String(i + 1) }),
+          h('span', {}, h('b', { text: ph.label }), h('small', { text: PHASE_HINT[ph.key] || '' })),
+          h('span', { class: 'cg-chip ' + (s === 'idle' ? '' : s), text: GLYPH[s] + ' ' + (STATE_WORD[s] || '') })),
+        h('ul', { class: 'cg-hero-legend is-tools' }, ph.panes.map(item)));
+    }))) : null;
   return h('div', { class: 'cg-hero-keys' },
     outs.length ? h('ul', { class: 'cg-hero-legend', 'aria-label': 'Client outcomes' }, outs.map(item)) : null,
-    tools.length ? h('ul', { class: 'cg-hero-legend is-tools', 'aria-label': 'Across the outcomes' }, tools.map(item)) : null);
+    automation);
 }
 
 export function render(root, ctx) {
@@ -264,11 +351,11 @@ export function render(root, ctx) {
   canvas.addEventListener('click', (e) => {
     const r = canvas.getBoundingClientRect(); const x = e.clientX - r.left, y = e.clientY - r.top;
     const L = state.L; if (!L) return;
-    const outs = (state.ctxData.panes || []).filter(isOutcome), tools = (state.ctxData.panes || []).filter((p) => !isOutcome(p));
+    const outs = (state.ctxData.panes || []).filter(isOutcome);
     const i = L.nodes.findIndex((n) => Math.abs(n.x - x) < L.node + 8 && Math.abs(n.y - y) < L.node + 8);
     if (i >= 0 && outs[i]) return state.ctxData.go('pane/' + outs[i].id);
-    const j = L.beads.findIndex((n) => Math.abs(n.x - x) < L.bead + 6 && Math.abs(n.y - y) < L.bead + 6);
-    if (j >= 0 && tools[j]) state.ctxData.go('pane/' + tools[j].id);
+    const b = L.beads.find((n) => Math.abs(n.x - x) < L.bead + 6 && Math.abs(n.y - y) < L.bead + 6);
+    if (b) state.ctxData.go('pane/' + b.p.id);
   });
   if (window.matchMedia) window.matchMedia('(prefers-reduced-motion: reduce)').addEventListener('change', (e) => { state.still = e.matches; if (state.still) state.redraw(); else kick(); });
 }

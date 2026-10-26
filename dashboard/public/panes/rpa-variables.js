@@ -1,6 +1,7 @@
-// Variables (grid): one card per variable of the chosen workflow (customer name, PO number…) with its label, its
-// default, whether it is secret, and the steps that use it; a card for the logins kept in Connections; a binding table
-// where each typing step is set to "typed as recorded" or to a variable; and found fields that look like variables.
+// Variables (split): the main column holds one card per variable of the chosen workflow (customer name, PO number…)
+// with its label, its default, whether it is secret and the steps that use it, then the binding table where each typing
+// step is set to "typed as recorded" or to a variable, and found fields that look like variables. The rail holds
+// "Add a variable" and the logins kept in Connections, so no card is left alone in a half-empty row.
 import { screen, chip, demoBanner, message, records } from './common.js';
 import { wfPicker, noWorkflows, field, text, check, paneLink } from './rpa-common.js';
 
@@ -8,7 +9,7 @@ const ticked = (box) => { const el = box.children[0]; return !!el && (el.checked
 
 const pane = screen((api) => {
   const { ctx, d, ui, h } = api;
-  if (!d.selected) return h('div', { class: 'cg-pane' }, demoBanner(ctx, d), noWorkflows(h, 'their variables'));
+  if (!d.selected) return h('div', { class: 'cg-pane rpa-pane' }, demoBanner(ctx, d), noWorkflows(h, 'their variables'));
   const busy = !!ui.busy, can = !!ctx.me.canRun;
   const wf = d.selected.id;
 
@@ -42,7 +43,7 @@ const pane = screen((api) => {
     h('p', { class: 'cg-note', text: 'The owner saves them under Connections > Desktop automation agent; they are never shown on screen.' }));
 
   const vars = d.variables;
-  const binding = h('section', { class: 'cg-card rpa-wide', 'aria-label': 'Which steps use which variable' },
+  const binding = h('section', { class: 'cg-card', 'aria-label': 'Which steps use which variable' },
     h('div', { class: 'cg-head' }, h('h3', { text: 'Which steps use them' }), chip(h, d.bindable.filter((b) => b.variable).length + ' of ' + d.bindable.length + ' use a variable', '')),
     records(h, ['Step', 'Recorded value', 'Types'], d.bindable.map((b) => [b, b.recorded, b]), {
       empty: 'No step types or chooses anything.',
@@ -56,10 +57,14 @@ const pane = screen((api) => {
     d.suggestions.length ? h('div', { class: 'rpa-suggest' }, h('p', { class: 'cg-note', text: 'These fields look like they change on every run: ' + d.suggestions.map((x) => x.label + ' (“' + x.sample + '”)').join(', ') + '.' }), h('button', { class: 'btn', type: 'button', disabled: busy || !can, text: 'Make them variables', onclick: () => api.act('suggest', { workflow: wf }) })) : null,
     h('div', { class: 'cg-actions' }, paneLink(h, 'rpa-typing', 'Keep a typed value secret in Typed inputs')));
 
-  return h('div', { class: 'cg-pane' }, demoBanner(ctx, d),
+  return h('div', { class: 'cg-pane rpa-pane' }, demoBanner(ctx, d),
     h('section', { class: 'cg-card rpa-wide' }, h('div', { class: 'cg-head' }, h('h3', { text: 'Variables of ' + d.selected.name }), chip(h, vars.length + (vars.length === 1 ? ' variable' : ' variables'), '')), wfPicker(api, d, 'Values like a customer name or PO number that change on every run'), message(h, ui)),
-    h('div', { class: 'rpa-vargrid' }, vars.map(card), add, logins),
-    binding);
+    h('div', { class: 'cg-split' },
+      h('div', { class: 'cg-main' },
+        vars.length ? h('div', { class: 'rpa-vargrid' }, vars.map(card))
+          : h('section', { class: 'cg-card rpa-empty', 'aria-label': 'No variables yet' }, h('h3', { text: 'No variables yet' }), h('p', { class: 'cg-note', text: 'Every step types exactly what was recorded. Add a variable for anything that changes from run to run, like a customer name or PO number, then choose it for the step below.' })),
+        binding),
+      h('aside', { class: 'cg-rail' }, add, logins)));
 });
 
 export function render(root, ctx) { return pane.render(root, ctx); }

@@ -111,7 +111,7 @@ const pane = screen((api) => {
         h('button', { class: 'linkbtn', type: 'button', disabled: busy, 'aria-label': 'Show recording ' + r.name, text: s && s.id === r.id ? 'Showing' : 'Show', onclick: () => api.act('select', { id: r.id }, { quiet: true }) }))))
         : h('p', { class: 'cg-note', text: 'No recordings yet.' })));
 
-  return h('div', { class: 'cg-pane' }, demoBanner(ctx, d), zoomCard(h, ui.zoom, () => { ui.zoom = null; api.repaint(); }),
+  return h('div', { class: 'cg-pane rpa-pane' }, demoBanner(ctx, d), zoomCard(h, ui.zoom, () => { ui.zoom = null; api.repaint(); }),
     h('div', { class: 'cg-split' }, h('div', { class: 'cg-main' }, recorder, sees, list), rail));
 });
 const self = { update: (r, c) => pane.update(r, c) };

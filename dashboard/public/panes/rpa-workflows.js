@@ -44,7 +44,7 @@ const pane = screen((api) => {
       h('span', { class: 'cg-rule-main' }, h('b', { text: r.name }), h('small', { text: (d.isAdmin ? r.clientName + ' · ' : '') + r.steps + ' steps · recorded ' + when(r.startedAt) })),
       h('button', { class: 'btn', type: 'button', disabled: busy || !can, 'aria-label': 'Make ' + r.name + ' a workflow', text: 'Make it a workflow', onclick: () => api.act('convert', { session: r.id, name: r.name }) }))))) : null;
 
-  if (!sel) return h('div', { class: 'cg-pane' }, demoBanner(ctx, d), ready, library);
+  if (!sel) return h('div', { class: 'cg-pane rpa-pane' }, demoBanner(ctx, d), ready, library);
 
   // ---------- the chosen workflow ----------
   const rename = text(h, 'wfname', 'Workflow name', sel.name, { maxlength: '80' });
@@ -74,13 +74,14 @@ const pane = screen((api) => {
   const valueInputs = sel.variableList.map((v) => [v.name, text(h, 'v_' + v.name, v.label, (sel.scheduleValues || {})[v.name] || v.default || '', { maxlength: '200' })]);
   const schedule = h('section', { class: 'cg-card', 'aria-label': 'Schedule' },
     h('div', { class: 'cg-head' }, h('h3', { text: 'Schedule' }), chip(h, sel.scheduleText, sch && sch.enabled !== false ? 'ok' : '')),
-    sel.nextRunAt ? h('p', { class: 'cg-note', text: 'Next run ' + when(sel.nextRunAt) }) : null,
+    sch ? h('p', { class: 'rpa-when' }, h('b', { text: sel.scheduleText }), h('small', { text: sch.enabled === false ? 'Paused' : sel.nextRunAt ? 'Next run ' + when(sel.nextRunAt) : 'Waiting for its first run' })) : h('p', { class: 'cg-note', text: 'Not scheduled. Set a time and it runs by itself, with the values below.' }),
+    h('details', { class: 'cg-more', open: sch ? null : true }, h('summary', { text: sch ? 'Change the schedule' : 'Set a schedule' }),
     h('form', { class: 'cg-form', onsubmit: (e) => { e.preventDefault(); api.act('set-schedule', { workflow: wf, kind: sKind.value, everyMin: sEvery.value, at: sAt.value, days: dayBoxes.filter(([, b]) => ticked(b)).map(([n]) => n), enabled: ticked(sOn), values: Object.fromEntries(valueInputs.map(([n, i]) => [n, i.value])) }); } },
       field(h, 'How often', sKind), field(h, 'Time (daily or weekly)', sAt), field(h, 'Minutes (every few minutes)', sEvery),
       h('div', { class: 'rpa-days', role: 'group', 'aria-label': 'Days for weekly runs' }, dayBoxes.map(([, b]) => b)),
       valueInputs.length ? h('div', { class: 'rpa-values' }, h('p', { class: 'cg-note', text: 'Values used when it runs by itself' }), valueInputs.map(([n, i]) => field(h, '{{' + n + '}}', i))) : null,
       sOn,
-      h('div', { class: 'cg-actions' }, h('button', { class: 'btn primary', type: 'submit', disabled: busy || !can || !sel.steps, text: 'Save schedule' }), sch ? h('button', { class: 'btn', type: 'button', disabled: busy || !can, text: 'Remove schedule', onclick: () => api.act('clear-schedule', { workflow: wf }) }) : null)));
+      h('div', { class: 'cg-actions' }, h('button', { class: 'btn primary', type: 'submit', disabled: busy || !can || !sel.steps, text: 'Save schedule' }), sch ? h('button', { class: 'btn', type: 'button', disabled: busy || !can, text: 'Remove schedule', onclick: () => api.act('clear-schedule', { workflow: wf }) }) : null))));
 
   // ---------- trigger ----------
   const tr = sel.trigger;
@@ -91,13 +92,15 @@ const pane = screen((api) => {
   const tTest = text(h, 'payload', 'Test event, e.g. subject=Invoice 7731', '', { maxlength: '200' });
   const trigger = h('section', { class: 'cg-card', 'aria-label': 'Trigger' },
     h('div', { class: 'cg-head' }, h('h3', { text: 'Trigger' }), chip(h, sel.triggerText, tr && tr.enabled !== false ? 'ok' : '')),
+    tr ? h('p', { class: 'rpa-when' }, h('b', { text: TRIGGER_WORD[tr.kind] || tr.kind }), h('small', { text: (tr.match ? 'only if it contains “' + tr.match + '”' : 'every time') + (Object.keys(tr.map || {}).length ? ' · fills ' + Object.keys(tr.map).map((k) => '{{' + k + '}}').join(', ') : '') })) : null,
     h('p', { class: 'cg-note', text: 'Start this workflow when something arrives. Only this client’s own outcomes start it. Details of the event (file, subject, from) can fill its variables.' }),
+    h('details', { class: 'cg-more', open: tr ? null : true }, h('summary', { text: tr ? 'Change the trigger' : 'Set a trigger' }),
     h('form', { class: 'cg-form', onsubmit: (e) => { e.preventDefault(); api.act('set-trigger', { workflow: wf, kind: tKind.value, match: tMatch.value, map: tMap.value, enabled: ticked(tOn) }); } },
       field(h, 'Start when', tKind), field(h, 'Only if it contains', tMatch), field(h, 'Fill variables', tMap, 'file, path, subject, from, rule'), tOn,
-      h('div', { class: 'cg-actions' }, h('button', { class: 'btn primary', type: 'submit', disabled: busy || !can || !sel.steps, text: 'Save trigger' }), tr ? h('button', { class: 'btn', type: 'button', disabled: busy || !can, text: 'Remove trigger', onclick: () => api.act('clear-trigger', { workflow: wf }) }) : null)),
+      h('div', { class: 'cg-actions' }, h('button', { class: 'btn primary', type: 'submit', disabled: busy || !can || !sel.steps, text: 'Save trigger' }), tr ? h('button', { class: 'btn', type: 'button', disabled: busy || !can, text: 'Remove trigger', onclick: () => api.act('clear-trigger', { workflow: wf }) }) : null))),
     tr ? h('form', { class: 'cg-form rpa-inline', onsubmit: (e) => { e.preventDefault(); api.act('test-trigger', { workflow: wf, payload: tTest.value }); } }, field(h, 'Send a test event', tTest), h('button', { class: 'btn', type: 'submit', disabled: busy || !can, text: 'Send test' })) : null);
 
-  return h('div', { class: 'cg-pane' }, demoBanner(ctx, d),
+  return h('div', { class: 'cg-pane rpa-pane' }, demoBanner(ctx, d),
     h('div', { class: 'cg-split' }, h('div', { class: 'cg-main' }, ready, library, card), h('aside', { class: 'cg-rail' }, schedule, trigger)));
 });
 

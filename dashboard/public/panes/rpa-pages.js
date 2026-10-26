@@ -10,7 +10,7 @@ const stopTitle = (st) => (st.kind === 'page' ? 'Page' : st.kind === 'app' ? 'Ap
 
 const pane = screen((api) => {
   const { ctx, d, ui, h } = api;
-  if (!d.selected) return h('div', { class: 'cg-pane' }, demoBanner(ctx, d), noWorkflows(h, 'the apps and pages each workflow goes through'));
+  if (!d.selected) return h('div', { class: 'cg-pane rpa-pane' }, demoBanner(ctx, d), noWorkflows(h, 'the apps and pages each workflow goes through'));
   const busy = !!ui.busy, can = !!ctx.me.canRun;
   const wf = d.selected.id;
   const lr = d.lastRun;
@@ -60,7 +60,7 @@ const pane = screen((api) => {
         : h('div', { class: 'cg-actions' }, h('button', { class: 'linkbtn', type: 'button', disabled: busy, text: st.kind === 'page' ? 'Change the page address' : 'Change the app', onclick: () => { ui.edit = s0.id; api.repaint(); } }))) : null);
   };
 
-  return h('div', { class: 'cg-pane' }, demoBanner(ctx, d), band, message(h, ui), alerts, h('div', { class: 'rpa-stops' }, d.stages.map(stop)));
+  return h('div', { class: 'cg-pane rpa-pane' }, demoBanner(ctx, d), band, message(h, ui), alerts, h('div', { class: 'rpa-stops' }, d.stages.map(stop)));
 });
 
 export function render(root, ctx) { return pane.render(root, ctx); }
