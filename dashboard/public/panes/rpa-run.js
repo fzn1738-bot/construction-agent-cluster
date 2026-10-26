@@ -39,7 +39,7 @@ const pane = screen((api) => {
       : h('p', { class: 'cg-note', text: 'No workflows yet. Record a task first, then run it here.' }),
     message(h, ui));
 
-  if (!run) return h('div', { class: 'cg-pane rpa-nowatch' }, demoBanner(ctx, d), start);
+  if (!run) return h('div', { class: 'cg-pane' }, demoBanner(ctx, d), start);
   ensureFresh(module_self);
 
   // ---------- the run ----------
@@ -71,7 +71,7 @@ const pane = screen((api) => {
   const recent = d.recent.length > 1 ? h('section', { class: 'cg-card', 'aria-label': 'Recent runs' }, h('h3', { text: 'Recent runs' }),
     chips(h, d.recent.map((r) => ({ key: r.id, label: r.name + ' · ' + r.word })), run.id, (k) => api.act('select', { id: k }, { quiet: true }), 'Choose a run')) : null;
 
-  return h('div', { class: 'cg-pane rpa-nowatch' }, demoBanner(ctx, d), zoomCard(h, ui.zoom, () => { ui.zoom = null; api.repaint(); }), start, current, recent, log);
+  return h('div', { class: 'cg-pane' }, demoBanner(ctx, d), zoomCard(h, ui.zoom, () => { ui.zoom = null; api.repaint(); }), start, current, recent, log);
 });
 const module_self = { update: (r, c) => pane.update(r, c) };
 

@@ -124,6 +124,12 @@ function build(now) {
   const r = store.startRecording(owner, { name: 'Close out a snag', app: 'Fieldwire', client: HARLOW });
   [{ kind: 'app', app: 'Fieldwire' }, { kind: 'click', target: 'Snag list' }, { kind: 'type', target: 'Snag reference', value: 'SNG-204' }].forEach((e, i) => store.recordEvent(owner, r.id, pictured({ ...e, at: 1000 + i * 4000 })));
   store.stopRecording(owner, r.id);
+  // Give the library a stable initial selection. The seeded workflows are created within a few milliseconds,
+  // so sorting by their unadjusted updatedAt could otherwise open a workflow with no typed inputs.
+  [po, chase, dwg, rfi, prog].forEach((w, i) => {
+    const saved = store.state.workflows.find((x) => x.id === w.id);
+    saved.updatedAt = new Date(now() - i * 60000).toISOString();
+  });
   return store;
 }
 

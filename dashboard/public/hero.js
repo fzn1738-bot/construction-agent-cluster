@@ -33,7 +33,7 @@ const stateText = (p) => String((p.state && p.state.text) || STATE_WORD[stateOf(
 const clip = (s, n) => (s.length > n ? s.slice(0, n - 1) + '…' : s);
 
 /** The one-line text equivalent of everything the canvas shows. */
-const rateOf = (ctx) => (ctx.metrics || []).find((m) => m.key === 'success') || (ctx.metrics || []).find((m) => m.key === 'syncRate');
+const rateOf = (ctx) => (ctx.metrics || []).find((m) => m.key === (ctx.status && ctx.status.workflowAutomation ? 'wfSuccess' : 'success')) || (ctx.metrics || []).find((m) => m.key === 'syncRate');
 const pctOf = (ctx) => { const r = rateOf(ctx); const v = r && r.value !== '–' ? r.value : ctx.status && ctx.status.primary && ctx.status.primary.value; const n = parseFloat(String(v ?? '')); return isNaN(n) ? null : n; };
 export function describe(ctx) {
   const st = ctx.status || {};

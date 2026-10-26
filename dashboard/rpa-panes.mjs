@@ -21,6 +21,24 @@ export const PANES = {
 export const RPA_PANE_IDS = Object.values(PANES);
 export const isRpaPane = (id) => RPA_PANE_IDS.includes(id);
 export const RPA_ACTIONS = ['run-due-workflows', 'stop-all-runs'];
+/** The overview orb switches to workflow results when this connection has trained workflows. */
+export function workflowOverview(base, rpa, ctx = {}, demoClient = null) {
+  const s = rpa.store.stats(scopeOf(ctx, { demoClient }));
+  if (!s.workflows) return base;
+  const last = s.lastRunAt ? Math.max(0, Math.round((Date.now() - Date.parse(s.lastRunAt)) / 60000)) : null;
+  const mood = base.mood === 'bad' ? 'bad' : s.waiting || s.failed && s.successRate < 80 ? 'wait' : s.running ? 'run' : base.mood;
+  const headline = base.mood === 'bad' ? base.headline : s.waiting ? 'Needs approval' : s.failed && s.successRate < 80 ? 'Needs a look' : s.running ? 'Working' : base.headline;
+  return {
+    ...base, mood, headline, workflowAutomation: true,
+    detail: s.workflows + (s.workflows === 1 ? ' trained workflow' : ' trained workflows') + ' · ' + s.today + ' run today · ' + base.detail,
+    primary: { label: 'Success rate', value: s.successRate + '%' },
+    ring: [
+      { label: 'Runs today', value: s.today },
+      { label: 'Success', value: s.successRate + '%' },
+      { label: 'Last run', value: last == null ? 'never' : last < 1 ? 'now' : last < 60 ? last + 'm' : Math.floor(last / 60) + 'h' }
+    ]
+  };
+}
 // the panes that work on one chosen workflow share the choice, so moving between them keeps it
 const WF_PANES = [PANES.typing, PANES.pages, PANES.workflows, PANES.steps, PANES.order, PANES.variables];
 
@@ -200,7 +218,7 @@ export function createRpa({ store, demo = false, clients = () => [], recorder, p
         columns: ['Step', 'Screenshot', 'Recorded', 'Note'],
         rows: frames.map((f) => [(f.idx + 1) + '. ' + f.name, f.shot ? 'Captured' : 'None', f.recorded ? 'Recorded' : '', f.note]),
         sources: { workflows: wfs.map((w) => ({ id: w.id, name: w.name, clientName: nameOf(w.client) })), recordings: recs.slice(0, 10).map(lightRec), runs: runs.map(lightRun) },
-        source: source ? { kind: source.kind, id: source.id, name: source.name } : null, frames,
+        selection: source ? { kind: source.kind, id: source.id, name: source.name } : null, frames,
         coverage: { total: frames.length, captured, withheld, missing: frames.length - captured - withheld, pct: frames.length ? Math.round((captured / Math.max(1, frames.length - withheld)) * 100) : 100 }
       };
     },
@@ -357,6 +375,7 @@ export function createRpa({ store, demo = false, clients = () => [], recorder, p
           return done(recorder.mode === 'desktop' ? 'Recording: the desktop agent is watching the screen. Do the task as you normally would' : 'Recording: the demo recorder plays a sample task');
         }
         if (action === 'event') {
+          if (!demo) return no('Live recordings only accept actions captured by the desktop agent');
           const sid = String(inp.session || '');
           const r = store.recordEvent(scope, sid, inp);
           return { ok: true, message: r.dropped ? (r.dropped === 'merged' ? 'Typing added to the previous step' : 'Ignored: the same action twice in a moment') : 'Step ' + store.getRecording(scope, sid).steps.length + ' added: ' + r.step.name, data: pane(id, ctx) };

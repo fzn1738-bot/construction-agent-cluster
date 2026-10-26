@@ -55,7 +55,7 @@ const pane = screen((api) => {
       h('h3', { text: 'Log' }), logList(h, sel.log));
   }
 
-  return h('div', { class: 'cg-pane rpa-nowatch' }, demoBanner(ctx, d), zoomCard(h, ui.zoom, () => { ui.zoom = null; api.repaint(); }), headline, charts, h('div', { class: 'cg-split' }, list, detail));
+  return h('div', { class: 'cg-pane' }, demoBanner(ctx, d), zoomCard(h, ui.zoom, () => { ui.zoom = null; api.repaint(); }), headline, charts, h('div', { class: 'cg-split' }, list, detail));
 });
 
 export function render(root, ctx) { return pane.render(root, ctx); }

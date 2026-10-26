@@ -44,23 +44,24 @@ test('Record screen: start, capture an action, redact a password, stop and save 
   assert.match(r.textContent, /already saved|saved as a workflow/i);
 });
 
-test('Workflows screen: select, reorder, rename, approval checkpoint, variable and schedule from the screen', async () => {
+test('Workflows, Order and Variables screens edit the same selected workflow', async () => {
   const { r, ctx } = await mount('rpa-workflows');
   for (const col of ['Workflow', 'Steps', 'Schedule', 'Last run']) assert.ok(r.textContent.includes(col));
   assert.match(r.textContent, /Harlow Build/); assert.match(r.textContent, /Northbeam Architects/, 'the admin sees every client');
   const first = find(r, (e) => e.tagName === 'BUTTON' && /rpa-wfname/.test(e.attrs.class || '') && e.textContent === 'Raise purchase order');
   first.click(); await settle();
   assert.equal(ctx.log.at(-1)[0], 'select');
-  const before = r.all().filter((e) => e.tagName === 'LI' && /rpa-step/.test(e.attrs.class || '')).length;
-  assert.ok(before >= 5);
-  byLabel(r, 'Move step 2 up').click(); await settle();
-  assert.equal(ctx.log.at(-1)[0], 'step-move'); assert.equal(ctx.log.at(-1)[1].ok, true);
-  const approval = find(r, (e) => e.tagName === 'BUTTON' && e.textContent === 'Approval' && e.attrs['aria-pressed'] === 'false');
-  approval.click(); await settle();
-  assert.equal(ctx.log.at(-1)[0], 'approval'); assert.match(r.textContent, /Approval checkpoint/);
-  input(r, 'vname').value = 'order_ref'; input(r, 'vlabel').value = 'Order reference';
-  await submit(formWith(r, 'vname'));
-  assert.equal(ctx.log.at(-1)[0], 'var-add'); assert.match(r.textContent, /\{\{order_ref\}\}/);
+  const order = await mount('rpa-order');
+  assert.ok(byLabel(order.r, 'Move step 2 up'));
+  byLabel(order.r, 'Move step 2 up').click(); await settle();
+  assert.equal(order.ctx.log.at(-1)[0], 'step-move'); assert.equal(order.ctx.log.at(-1)[1].ok, true);
+  byLabel(order.r, 'Wait for approval before step 2').click(); await settle();
+  await submit(formWith(order.r, 'note'));
+  assert.equal(order.ctx.log.at(-1)[0], 'approval'); assert.match(order.r.textContent, /Approval checkpoint/);
+  const variables = await mount('rpa-variables');
+  input(variables.r, 'vname').value = 'order_ref'; input(variables.r, 'vlabel').value = 'Order reference';
+  await submit(formWith(variables.r, 'vname'));
+  assert.equal(variables.ctx.log.at(-1)[0], 'var-add'); assert.match(variables.r.textContent, /order_ref/);
   input(r, 'wfname').value = 'Raise PO (renamed)';
   await submit(formWith(r, 'wfname'));
   assert.ok(ctx.log.some(([a]) => a === 'rename')); assert.match(r.textContent, /Raise PO \(renamed\)/);

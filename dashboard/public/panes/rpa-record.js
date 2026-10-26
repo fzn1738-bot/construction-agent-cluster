@@ -57,7 +57,7 @@ const pane = screen((api) => {
   else if (s.state === 'recording') body = [
     watcher(),
     h('div', { class: 'cg-actions' }, actionButton(api, 'Stop recording', 'stop', { session: s.id }, { primary: true, busy: 'Stopping…' }), actionButton(api, 'Discard', 'discard', { session: s.id }, { busy: 'Discarding…' })),
-    h('details', { class: 'cg-more' }, h('summary', { text: 'Add a missed action by hand' }), eventForm)
+    d.source === 'demo' ? h('details', { class: 'cg-more' }, h('summary', { text: 'Try a simulated action' }), eventForm) : null
   ];
   else if (s.state === 'stopped') {
     const saveName = text(h, 'wfname', 'Workflow name', s.name, { maxlength: '80' });

@@ -519,4 +519,100 @@
 .rpa-log-error b { color: var(--bad); } .rpa-log-warn b { color: var(--warn); }
 .rpa-hist-head { grid-template-columns: minmax(0, 1fr); }
 @media (min-width: 720px) { .rpa-hist-head { grid-template-columns: auto minmax(0, 1fr) auto; align-items: center; } }
-@media (prefers-reduced-motion: reduce) { .rpa-dot, .rpa-dots .rpa-d-running { animation: none; } }
+/* shared by the workflow screens */
+.rpa-picker { max-width: 520px; }
+.rpa-empty { justify-items: start; }
+.rpa-wide { grid-column: 1 / -1; }
+.rpa-links { gap: 4px 16px; }
+.rpa-shotwhy { color: var(--ink-3); font-size: 12px; overflow-wrap: anywhere; }
+.rpa-sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+.rpa-dl { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 4px 12px; margin: 0; font-size: 14px; }
+.rpa-dl dt { color: var(--ink-3); } .rpa-dl dd { margin: 0; overflow-wrap: anywhere; }
+
+/* record: the live watcher and what the recorder sees */
+.rpa-watch { display: grid; gap: 4px; }
+.rpa-watch small { color: var(--ink-3); font-size: 12px; }
+.rpa-sees { margin: 0; }
+.rpa-sees figcaption { font-size: 12px; color: var(--ink-3); }
+
+/* typed inputs */
+.rpa-tiles { display: grid; gap: 16px; grid-template-columns: minmax(0, 1fr); }
+@media (min-width: 720px) { .rpa-tiles { grid-template-columns: repeat(3, minmax(0, 1fr)); } }
+.rpa-inputs { list-style: none; margin: 0; padding: 0; display: grid; }
+.rpa-input { display: grid; gap: 8px; padding: 12px 0 12px 12px; border-top: 1px solid var(--rule); border-left: 3px solid var(--rule); }
+.rpa-input:first-child { border-top: 0; }
+.rpa-input.rpa-g-variable { border-left-color: var(--ok); } .rpa-input.rpa-g-secret { border-left-color: var(--warn); }
+@media (min-width: 900px) { .rpa-input { grid-template-columns: minmax(0, 1fr) auto; align-items: center; } }
+.rpa-input-main { display: grid; gap: 2px; min-width: 0; }
+.rpa-input-main b { color: var(--strong); font-weight: 650; }
+.rpa-input-main small { color: var(--ink-3); font-size: 12px; overflow-wrap: anywhere; }
+.rpa-typed { font-size: 16px; color: var(--ink); overflow-wrap: anywhere; }
+.rpa-typed.is-var { color: var(--ok); } .rpa-typed.is-secret { color: var(--warn); letter-spacing: 0.04em; }
+.rpa-input-tools { justify-content: flex-start; }
+
+/* apps & pages: the route band */
+.rpa-route { list-style: none; margin: 0; padding: 0; display: grid; gap: 0; }
+.rpa-stop { position: relative; display: grid; gap: 2px; padding: 0 0 16px 28px; min-width: 0; }
+.rpa-stop::before { content: ""; position: absolute; left: 7px; top: 16px; bottom: 0; width: 2px; background: var(--rule); }
+.rpa-stop:last-child::before { display: none; }
+.rpa-stop-dot { position: absolute; left: 0; top: 2px; width: 16px; height: 16px; border-radius: 50%; border: 2px solid var(--accent); background: var(--surface); }
+.rpa-stop-app .rpa-stop-dot { border-radius: 4px; }
+.rpa-stop.is-passed .rpa-stop-dot { background: var(--ok); border-color: var(--ok); }
+.rpa-stop.is-failed .rpa-stop-dot { background: var(--bad); border-color: var(--bad); }
+.rpa-stop b { color: var(--strong); font-weight: 650; overflow-wrap: anywhere; }
+.rpa-stop small { color: var(--ink-3); font-size: 12px; }
+@media (min-width: 900px) {
+  .rpa-route { grid-auto-flow: column; grid-auto-columns: minmax(160px, 1fr); overflow-x: auto; padding-bottom: 4px; }
+  .rpa-stop { padding: 28px 16px 0 0; }
+  .rpa-stop::before { left: 16px; right: 0; top: 7px; bottom: auto; width: auto; height: 2px; }
+}
+.rpa-alertcard { border-left: 4px solid var(--bad); }
+.rpa-stops { display: grid; gap: 16px; grid-template-columns: minmax(0, 1fr); }
+@media (min-width: 900px) { .rpa-stops { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+.rpa-mini { list-style: none; margin: 0; padding: 0; display: grid; gap: 6px; }
+.rpa-mini li { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; font-size: 14px; }
+.rpa-mini-n { min-width: 24px; height: 24px; border-radius: 50%; display: inline-grid; place-items: center; font: 650 12px var(--sans); background: var(--accent-soft); color: var(--accent); }
+
+/* step screenshots: coverage bar and contact sheet */
+.rpa-cover { display: flex; height: 10px; border-radius: 5px; overflow: hidden; background: var(--surface-2); border: 1px solid var(--rule); }
+.rpa-cover i { display: block; flex-grow: 0; flex-shrink: 0; }
+.rpa-cover-ok { background: var(--ok); } .rpa-cover-held { background: var(--warn); } .rpa-cover-none { background: var(--bad); }
+.rpa-w0 { flex-basis: 0%; } .rpa-w5 { flex-basis: 5%; } .rpa-w10 { flex-basis: 10%; } .rpa-w15 { flex-basis: 15%; } .rpa-w20 { flex-basis: 20%; } .rpa-w25 { flex-basis: 25%; } .rpa-w30 { flex-basis: 30%; } .rpa-w35 { flex-basis: 35%; } .rpa-w40 { flex-basis: 40%; } .rpa-w45 { flex-basis: 45%; } .rpa-w50 { flex-basis: 50%; } .rpa-w55 { flex-basis: 55%; } .rpa-w60 { flex-basis: 60%; } .rpa-w65 { flex-basis: 65%; } .rpa-w70 { flex-basis: 70%; } .rpa-w75 { flex-basis: 75%; } .rpa-w80 { flex-basis: 80%; } .rpa-w85 { flex-basis: 85%; } .rpa-w90 { flex-basis: 90%; } .rpa-w95 { flex-basis: 95%; } .rpa-w100 { flex-basis: 100%; }
+.rpa-sheet { list-style: none; margin: 0; padding: 0; display: grid; gap: 16px; grid-template-columns: minmax(0, 1fr); }
+@media (min-width: 640px) { .rpa-sheet { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+@media (min-width: 1100px) { .rpa-sheet { grid-template-columns: repeat(3, minmax(0, 1fr)); } }
+.rpa-frame { gap: 8px; }
+.rpa-frame.is-failed { border-left: 4px solid var(--bad); }
+.rpa-frame-head { display: flex; justify-content: space-between; gap: 8px; align-items: start; }
+.rpa-frame-head b { color: var(--strong); font-weight: 650; overflow-wrap: anywhere; }
+.rpa-frame-pair { display: grid; gap: 8px; grid-template-columns: repeat(2, minmax(0, 1fr)); }
+.rpa-frame-img { display: grid; gap: 4px; padding: 0; border: 0; background: none; cursor: zoom-in; text-align: left; color: var(--ink-3); font-size: 12px; min-height: 44px; }
+.rpa-frame-img:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; border-radius: 10px; }
+.rpa-shot-frame { display: block; width: 100%; aspect-ratio: 16 / 10; object-fit: cover; object-position: top left; border-radius: 10px; border: 1px solid var(--rule); background: var(--surface-2); }
+.rpa-frame-none { display: grid; place-items: center; aspect-ratio: 16 / 10; border-radius: 10px; border: 1px dashed var(--rule); color: var(--ink-3); font-size: 12px; }
+
+/* step editor */
+.rpa-step.is-focus { background: var(--accent-soft); border-radius: 12px; padding-inline: 8px; }
+.rpa-peek { font-size: 14px; }
+.rpa-focus { position: sticky; top: 16px; }
+
+/* order & checkpoints: the flow */
+.rpa-flow { list-style: none; margin: 0; padding: 0; display: grid; gap: 8px; }
+.rpa-flowend { justify-self: start; padding: 4px 12px; border-radius: 999px; background: var(--surface-2); border: 1px solid var(--rule); color: var(--ink-2); font-size: 12px; font-weight: 650; }
+.rpa-flownode { display: grid; gap: 8px; padding-left: 16px; border-left: 2px solid var(--rule); }
+.rpa-flownode.is-dragging { opacity: 0.5; }
+.rpa-flowcard { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 8px 12px; align-items: start; padding: 12px; border-radius: 12px; border: 1px solid var(--rule); background: var(--surface); }
+.rpa-flownode[draggable="true"] .rpa-flowcard { cursor: grab; }
+.rpa-flowtools { grid-column: 1 / -1; display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
+@media (min-width: 900px) { .rpa-flowcard { grid-template-columns: auto minmax(0, 1fr) auto; } .rpa-flowtools { grid-column: auto; justify-content: flex-end; } }
+.rpa-posfield select { font: inherit; padding: 10px 12px; border-radius: 10px; border: 1px solid var(--rule); background: var(--surface-2); color: var(--ink); min-height: 44px; }
+.rpa-gate { display: grid; gap: 4px; padding: 12px; border-radius: 12px; border: 1px solid var(--warn); background: var(--warn-soft); color: var(--ink); font-size: 14px; }
+.rpa-gate b { color: var(--warn); }
+
+/* variables */
+.rpa-vargrid { display: grid; gap: 16px; grid-template-columns: minmax(0, 1fr); }
+@media (min-width: 720px) { .rpa-vargrid { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+@media (min-width: 1100px) { .rpa-vargrid { grid-template-columns: repeat(3, minmax(0, 1fr)); } }
+.rpa-varcard.is-secret { border-left: 4px solid var(--warn); }
+.rpa-varcard small { color: var(--ink-3); font-size: 12px; }
+@media (prefers-reduced-motion: reduce) { .rpa-dot, .rpa-dots .rpa-d-running { animation: none; } .rpa-focus { position: static; } }

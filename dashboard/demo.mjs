@@ -8,7 +8,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import * as kit from './store.mjs';
 import * as O from './outcomes.mjs';
-import { isRpaPane, RPA_ACTIONS } from './rpa-panes.mjs';
+import { isRpaPane, RPA_ACTIONS, workflowOverview } from './rpa-panes.mjs';
 import { demoRpa } from './rpa-demo.mjs';
 import { liveRpa, agentReady, probeAgent, agentSettings } from './rpa-live.mjs';
 
@@ -210,7 +210,7 @@ async function allowOf(ctx) {
   return (pid) => ids.has(pid);
 }
 
-export async function status() { return O.statusOf(world()); }
+export async function status(ctx = {}) { return workflowOverview(O.statusOf(world()), rpa(), ctx, 'demo-harlow'); }
 export async function paneStatus(ctx = {}) { const w = world(); return { ...O.paneStates(w), ...rpa().states(ctx), [PANE.services]: O.paneStates(demoServices(w))[PANE.services] }; }
 
 export async function metrics(ctx = {}) {

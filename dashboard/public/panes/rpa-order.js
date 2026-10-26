@@ -47,6 +47,7 @@ const pane = screen((api) => {
     return item;
   };
   const flow = h('section', { class: 'cg-card', 'aria-label': 'Steps in replay order' },
+    h('p', { class: 'cg-note', text: '# · Step · Where · Checkpoint' }),
     n ? h('ol', { class: 'rpa-flow' }, h('li', { class: 'rpa-flowend', 'aria-hidden': 'true', text: 'Start' }), d.steps.map(node), h('li', { class: 'rpa-flowend', 'aria-hidden': 'true', text: 'Done' }))
       : h('p', { class: 'cg-note', text: 'This workflow has no steps yet.' }),
     can && n > 1 ? h('p', { class: 'cg-note', text: 'Drag a step onto another to put it there, or use the arrows and the position list.' }) : null);

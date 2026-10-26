@@ -10,7 +10,7 @@ const KINDS = [['workflow', 'Workflows'], ['recording', 'Recordings'], ['run', '
 const pane = screen((api) => {
   const { ctx, d, ui, h } = api;
   const busy = !!ui.busy, can = !!ctx.me.canRun;
-  const src = d.source;
+  const src = d.selection;
   const kind = ui.kind || (src ? src.kind : 'workflow');
   const list = kind === 'workflow' ? d.sources.workflows.map((w) => [w.id, w.name + (d.isAdmin ? ' · ' + w.clientName : '')])
     : kind === 'recording' ? d.sources.recordings.map((r) => [r.id, r.name + ' · ' + r.steps + ' steps'])
@@ -25,6 +25,7 @@ const pane = screen((api) => {
     h('i', { class: 'rpa-cover-ok rpa-w' + pct(cov.captured) }), h('i', { class: 'rpa-cover-held rpa-w' + pct(cov.withheld) }), h('i', { class: 'rpa-cover-none rpa-w' + pct(cov.missing) }));
   const head = h('section', { class: 'cg-card rpa-sheethead', 'aria-label': 'Choose screenshots' },
     h('div', { class: 'cg-head' }, h('h3', { text: src ? src.name : 'Screenshots' }), chip(h, cov.pct + '% captured', cov.missing ? 'warn' : 'ok')),
+    h('p', { class: 'cg-note', text: 'Step · Screenshot · Recorded · Note' }),
     chips(h, KINDS.map(([k, l]) => ({ key: k, label: l, n: k === 'workflow' ? d.sources.workflows.length : k === 'recording' ? d.sources.recordings.length : d.sources.runs.length })), kind, (k) => { ui.kind = k; const first = k === 'workflow' ? d.sources.workflows[0] : k === 'recording' ? d.sources.recordings[0] : d.sources.runs[0]; if (first) api.act('pick', { kind: k, id: first.id }, { quiet: true }); else api.repaint(); }, 'Screenshots of'),
     which ? h('label', { class: 'rpa-field' }, h('span', { text: KINDS.find(([k]) => k === kind)[1].replace(/s$/, '') }), which) : h('p', { class: 'cg-note', text: 'None yet.' }),
     cov.total ? meter : null,

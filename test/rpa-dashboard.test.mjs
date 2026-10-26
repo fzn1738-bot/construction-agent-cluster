@@ -6,6 +6,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import http from 'node:http';
+import { after } from 'node:test';
 
 const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'rpa-dash-'));
 process.env.AGENT_DB = path.join(dir, 'agent.db');
@@ -17,13 +18,22 @@ process.env.HQ_ADMIN_KEY = 'rpa-admin-key';
 // a desktop automation agent: Bearer token, /health, /step (fails on target "Missing"), /events
 const stepsSeen = [];
 let missingOk = false;
+let recordedEvents = [];
+let recordingSession = '';
 const agent = http.createServer((req, res) => {
   let b = ''; req.on('data', (c) => { b += c; });
   req.on('end', () => {
     res.setHeader('content-type', 'application/json');
     if (req.headers.authorization !== 'Bearer agent-token') { res.statusCode = 401; return res.end(JSON.stringify({ ok: false, message: 'Bad token' })); }
     if (req.url === '/health') return res.end(JSON.stringify({ ok: true, version: '1.2' }));
-    if (req.url.startsWith('/events')) return res.end(JSON.stringify({ events: [{ kind: 'click', target: 'From agent', at: Date.now() }], next: 1 }));
+    if (req.url === '/record/start') { recordingSession = JSON.parse(b).session; return res.end(JSON.stringify({ ok: true, session: recordingSession })); }
+    if (req.url === '/record/stop') return res.end(JSON.stringify({ ok: true }));
+    if (req.url.startsWith('/events')) {
+      const u = new URL(req.url, 'http://agent');
+      if (u.searchParams.get('session') !== recordingSession) return res.end(JSON.stringify({ ok: false, code: 'not-found', message: 'No recording' }));
+      const after = Number(u.searchParams.get('after')) || 0;
+      return res.end(JSON.stringify({ ok: true, events: recordedEvents.slice(after), next: recordedEvents.length }));
+    }
     if (req.url === '/step') {
       const step = JSON.parse(b).step; stepsSeen.push(step);
       if (step.target === 'Missing' && !missingOk) return res.end(JSON.stringify({ ok: false, code: 'target-missing', message: 'No element "Missing" on the page' }));
@@ -41,6 +51,7 @@ const demo = await import('../dashboard/demo.mjs');
 const live = await import('../dashboard/rpa-live.mjs');
 const panesMod = await import('../dashboard/rpa-panes.mjs');
 const srv = await start(0);
+after(async () => { await hooks.shutdown(); agent.closeAllConnections(); srv.closeAllConnections(); await new Promise((r) => agent.close(r)); await new Promise((r) => srv.close(r)); });
 const base = 'http://127.0.0.1:' + srv.address().port;
 const admin = { 'x-app-key': 'rpa-admin-key' };
 const json = async (route, headers = admin, body) => (await fetch(base + route, { method: body ? 'POST' : 'GET', headers, body: body ? JSON.stringify(body) : undefined })).json();
@@ -113,34 +124,36 @@ test('F1-F5, live: with the agent saved, a client records a task and it becomes 
   const s = await act('rpa-record', 'start', { name: 'Raise PO', app: 'ERP' }, A);
   assert.equal(s.ok, true);
   const sid = s.data.session.id;
-  for (const [kind, target, value] of A_STEPS) assert.equal((await act('rpa-record', 'event', { session: sid, kind, target, value, screenshot: kind === 'click' ? 'data:image/png;base64,iVBORw0KGgo=' : undefined }, A)).ok, true);
-  assert.equal((await act('rpa-record', 'event', { session: sid, kind: 'click', target: 'Save' }, A)).ok, true, 'duplicate swallowed');
+  assert.equal((await act('rpa-record', 'event', { session: sid, kind: 'click', target: 'Injected' }, A)).ok, false, 'live events must come from the desktop agent');
+  recordedEvents = A_STEPS.map(([kind, target, value], i) => ({ kind, target, value, app: 'ERP', at: 1000 + i * 5000, screenshot: 'data:image/png;base64,iVBORw0KGgo=' }));
+  assert.equal((await act('rpa-record', 'pull', { session: sid }, A)).ok, true);
+  recordedEvents.push({ kind: 'click', target: 'Save', app: 'ERP', at: 21000, screenshot: 'data:image/png;base64,iVBORw0KGgo=' });
   const rec = (await pane('rpa-record', A)).session;
   assert.equal(rec.steps.length, 4);
   assert.equal(rec.steps[2].secret, true); assert.equal(rec.steps[2].value, ''); assert.equal(rec.steps[2].shot, null);
   assert.match(rec.steps[3].shot, /^data:image\/png/);
   assert.ok(!JSON.stringify(rec).includes('hunter2'));
   const pull = await act('rpa-record', 'pull', { session: sid }, A);
-  assert.equal(pull.ok, true); assert.match(pull.message, /Pulled 1/);
+  assert.equal(pull.ok, true); assert.match(pull.message, /1 new action/);
   const saveR = await act('rpa-record', 'save', { session: sid, name: 'Raise PO' }, A);
   assert.equal(saveR.ok, true);
-  wfA = (await pane('rpa-workflows', A)).selected;
+  wfA = { ...(await pane('rpa-workflows', A)).selected, steps: (await pane('rpa-steps', A)).steps };
   assert.equal(wfA.name, 'Raise PO'); assert.equal(wfA.steps.length, 5);
-  assert.ok(wfA.steps.filter((x) => !x.secret).every((x) => x.shot), 'every step has a screenshot, except the one holding a password');
+  assert.ok(wfA.steps.filter((x) => !x.secret).every((x) => x.hasShot), 'every step has a screenshot, except the one holding a password');
 });
 
 test('F6/F7/F8, live: rename, reorder, variables and an approval checkpoint persist on disk', async () => {
   const w = wfA.id, step = (i) => wfA.steps[i].id;
   assert.equal((await act('rpa-workflows', 'rename', { workflow: w, name: 'Raise purchase order' }, A)).ok, true);
-  assert.equal((await act('rpa-workflows', 'step-rename', { workflow: w, step: step(0), name: 'Enter customer' }, A)).ok, true);
-  assert.equal((await act('rpa-workflows', 'step-move', { workflow: w, step: step(3), by: -1 }, A)).ok, true);
-  assert.equal((await act('rpa-workflows', 'step-move', { workflow: w, step: step(0), by: -1 }, A)).ok, false, 'cannot go above the top');
-  const sg = (await pane('rpa-workflows', A)).suggestions;
+  assert.equal((await act('rpa-steps', 'step-rename', { workflow: w, step: step(0), name: 'Enter customer' }, A)).ok, true);
+  assert.equal((await act('rpa-order', 'step-move', { workflow: w, step: step(3), by: -1 }, A)).ok, true);
+  assert.equal((await act('rpa-order', 'step-move', { workflow: w, step: step(0), by: -1 }, A)).ok, false, 'cannot go above the top');
+  const sg = (await pane('rpa-typing', A)).suggestions;
   assert.deepEqual(sg.map((x) => x.name), ['customer_name', 'po_number']);
-  assert.equal((await act('rpa-workflows', 'suggest', { workflow: w }, A)).ok, true);
-  assert.equal((await act('rpa-workflows', 'approval', { workflow: w, step: step(4), on: true, note: 'Check the total' }, A)).ok, true);
-  assert.equal((await act('rpa-workflows', 'var-add', { workflow: w, name: 'x y' }, A)).ok, false);
-  const d = (await pane('rpa-workflows', A)).selected;
+  assert.equal((await act('rpa-variables', 'suggest', { workflow: w }, A)).ok, true);
+  assert.equal((await act('rpa-order', 'approval', { workflow: w, step: step(4), on: true, note: 'Check the total' }, A)).ok, true);
+  assert.equal((await act('rpa-variables', 'var-add', { workflow: w, name: 'x y' }, A)).ok, false);
+  const d = { ...(await pane('rpa-workflows', A)).selected, steps: (await pane('rpa-steps', A)).steps, variables: (await pane('rpa-variables', A)).variables };
   assert.equal(d.name, 'Raise purchase order');
   assert.deepEqual(d.steps.map((x) => x.name).slice(0, 2), ['Enter customer', d.steps[1].name]);
   assert.equal(d.steps[0].value, '{{customer_name}}');
@@ -152,7 +165,7 @@ test('F6/F7/F8, live: rename, reorder, variables and an approval checkpoint pers
   const saved = onDisk.workflows.find((x) => x.id === w);
   assert.equal(saved.name, 'Raise purchase order'); assert.equal(saved.steps.length, 5); assert.equal(saved.schedule.at, '07:30');
   assert.ok(!JSON.stringify(onDisk).includes('hunter2'), 'the typed password is nowhere on disk');
-  wfA = (await pane('rpa-workflows', A)).selected;
+  wfA = { ...(await pane('rpa-workflows', A)).selected, steps: (await pane('rpa-steps', A)).steps };
 });
 
 test('Run mode, live: a client replays its workflow on the agent; the approval gate, screenshots and masked secret', async () => {
@@ -180,7 +193,7 @@ test('Run mode, live: a client replays its workflow on the agent; the approval g
 });
 
 test('Run history, live: a failing step is explained and logged, and the run continues from the failed step', async () => {
-  await act('rpa-workflows', 'step-add', { workflow: wfA.id, kind: 'click', target: 'Missing', after: wfA.steps[3].id }, A);
+  await act('rpa-steps', 'step-add', { workflow: wfA.id, kind: 'click', target: 'Missing', after: wfA.steps[3].id }, A);
   const go = await act('rpa-run', 'start', { workflow: wfA.id, values: { customer_name: 'a', po_number: 'b' } }, A);
   const id = go.data.active.id;
   const fin = await settle(A, id);
@@ -208,8 +221,8 @@ test('Run history, live: a failing step is explained and logged, and the run con
   const stopped = await settle(A, aid);
   assert.equal(stopped.state, 'stopped'); assert.equal(stopped.steps[5].state, 'stopped');
   // editing the workflow after a run makes that run's "continue" refuse rather than guess
-  const now = (await pane('rpa-workflows', A)).selected.steps;
-  await act('rpa-workflows', 'step-delete', { workflow: wfA.id, step: now[4].id }, A);
+  const now = (await pane('rpa-steps', A)).steps;
+  await act('rpa-steps', 'step-delete', { workflow: wfA.id, step: now[4].id }, A);
   const stale = await act('rpa-history', 'resume', { run: id }, A);
   assert.equal(stale.ok, false); assert.match(stale.message, /edited since that run/);
 });
@@ -217,12 +230,13 @@ test('Run history, live: a failing step is explained and logged, and the run con
 test('per-client isolation: another client and a client without the pane see none of it', async () => {
   const dB = await pane('rpa-workflows', B);
   assert.deepEqual(dB.workflows, []); assert.equal(dB.selected, null);
+  assert.equal((await json('/api/summary', B)).status.workflowAutomation, undefined, 'another client sees no workflow totals in the overview');
   assert.deepEqual((await pane('rpa-history', B)).runs, []);
   assert.equal((await pane('rpa-run', B)).active, null);
   const hijack = await act('rpa-workflows', 'select', { id: wfA.id }, B);
   assert.equal(hijack.data.selected, null);
-  for (const [action, input] of [['rename', { workflow: wfA.id, name: 'mine' }], ['delete', { workflow: wfA.id }], ['step-delete', { workflow: wfA.id, step: wfA.steps[0].id }], ['duplicate', { workflow: wfA.id }]]) {
-    const r = await act('rpa-workflows', action, input, B); assert.equal(r.ok, false, action); assert.match(r.message, /No such workflow/);
+  for (const [id, action, input] of [['rpa-workflows', 'rename', { workflow: wfA.id, name: 'mine' }], ['rpa-workflows', 'delete', { workflow: wfA.id }], ['rpa-steps', 'step-delete', { workflow: wfA.id, step: wfA.steps[0].id }], ['rpa-workflows', 'duplicate', { workflow: wfA.id }]]) {
+    const r = await act(id, action, input, B); assert.equal(r.ok, false, action); assert.match(r.message, /No such workflow/);
   }
   assert.equal((await act('rpa-run', 'start', { workflow: wfA.id, values: {} }, B)).ok, false);
   assert.equal((await act('rpa-workflows', 'assign', { workflow: wfA.id, client: 'x' }, B)).ok, false);
@@ -264,7 +278,7 @@ test('schedules fire against the live store, triggers read the agent log, and th
   assert.deepEqual(ev('folder', 'ok', { event: 'added', path: '/x/y/plan.pdf' }), { source: 'folder', payload: { file: 'plan.pdf', path: '/x/y/plan.pdf' } });
   assert.deepEqual(ev('ftp', 'ok', { op: 'download', file: 'a.dwg' }).source, 'ftp');
   assert.equal(ev('imap', 'ignored', { uid: 1 }), null); assert.equal(ev('folder', 'ok', { event: 'modified' }), null);
-  const fired = store.fireTrigger('inbox', { subject: 'Purchase order 12' });
+  const fired = store.fireTrigger('inbox', { subject: 'Purchase order 12' }, { clients: [wf.client] });
   assert.ok(fired.length >= 1); await new Promise((r) => setTimeout(r, 100)); store.stopAll({ admin: true }, 'test'); await store.whenIdle();
   const ctl = await json('/api/run', admin, { action: 'run-due-workflows' });
   assert.equal(ctl.ok, true);
@@ -274,6 +288,10 @@ test('schedules fire against the live store, triggers read the agent log, and th
 });
 
 test('overview: panes get live status, metrics and panels from the workflow store', async () => {
+  const overview = await hooks.status();
+  assert.equal(overview.workflowAutomation, true);
+  assert.equal(overview.primary.value, live.liveRpa().store.stats({ admin: true }).successRate + '%');
+  assert.equal(overview.ring[0].value, live.liveRpa().store.stats({ admin: true }).today);
   const st = await hooks.paneStatus();
   assert.equal(st['rpa-workflows'].state, 'ok'); assert.ok(!st['rpa-workflows'].demo);
   const ms = await hooks.metrics();
@@ -283,6 +301,4 @@ test('overview: panes get live status, metrics and panels from the workflow stor
   assert.equal(line.series[0].values.length, 24); assert.equal(line.pane, 'rpa-history');
   assert.equal(panesMod.scopeOf({ user: { id: 'c', role: 'client' } }).client, 'c');
   assert.equal(panesMod.scopeOf({}).admin, true);
-  await hooks.shutdown();
-  agent.close(); srv.close();
 });

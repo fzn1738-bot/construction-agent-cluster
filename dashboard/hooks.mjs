@@ -28,7 +28,7 @@ import * as kit from './store.mjs';
 import { getSettings, saveSettings } from './store.mjs';
 import * as demo from './demo.mjs';
 import * as O from './outcomes.mjs';
-import { isRpaPane, RPA_ACTIONS } from './rpa-panes.mjs';
+import { isRpaPane, RPA_ACTIONS, workflowOverview } from './rpa-panes.mjs';
 import { demoRpa } from './rpa-demo.mjs';
 import { liveRpa, agentReady, probeAgent, startScheduler } from './rpa-live.mjs';
 
@@ -441,10 +441,11 @@ async function world() {
 }
 
 // ---------- status, metrics, panels ----------
-export async function status() {
+export async function status(ctx = {}) {
   syncDemo(false);
   const { w } = await world();
-  return O.statusOf(w);
+  const base = O.statusOf(w);
+  return agentReady() ? workflowOverview(base, liveRpa(), ctx) : base;
 }
 
 /** One state per tab, for the Overview centrepiece and the sidebar. Reads local state only (polled often). */

@@ -49,6 +49,7 @@ const pane = screen((api) => {
   const aApp = text(h, 'aapp', 'App, e.g. Safari', '', { maxlength: '80' });
   const list = h('section', { class: 'cg-card', 'aria-label': 'Steps' },
     h('div', { class: 'cg-head' }, h('h3', { text: 'Steps of ' + d.selected.name }), chip(h, d.steps.length + (d.steps.length === 1 ? ' step' : ' steps'), '')),
+    h('p', { class: 'cg-note', text: 'Step · Action · Target · Value' }),
     wfPicker(api, d, 'Version ' + d.selected.version + ' · every save makes a new version'),
     d.steps.length ? h('ol', { class: 'rpa-steps' }, d.steps.map(row)) : h('p', { class: 'cg-note', text: 'No steps yet. Add one below or record the task.' }),
     h('details', { class: 'cg-more' }, h('summary', { text: 'Add a step by hand' }),

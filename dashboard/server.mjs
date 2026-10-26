@@ -71,7 +71,7 @@ async function summary(user) {
   const mine = user.role === 'admin' ? runs : runs.filter((r) => r.by === user.id || ids.has(r.pane) || r.pane === 'overview');
   const m = store.maintenance();
   const h = src();
-  // numbers are counted for the person asking, so a client never sees totals that include other clients
+  // A client's overview must only count the workflows and runs belonging to that client.
   const who = { user: { id: user.id, name: user.name, role: user.role } };
   const states = await safely(() => (h.paneStatus ? h.paneStatus(who) : {}), {});
   const cs = store.connectionSummary();
@@ -80,7 +80,7 @@ async function summary(user) {
     me: { name: user.name, role: user.role, canRun: user.role === 'admin' || !!user.canRun },
     panes: allowed.map((p) => ({ id: p.id, title: p.title, summary: p.summary, feature: p.feature, layout: p.layout, clientVisible: p.clientVisible, view: paneView(p.id), state: states && states[p.id] ? states[p.id] : null })),
     connections: user.role === 'admin' ? cs : { total: cs.total, ready: cs.ready },
-    status: await safely(() => h.status(), {}),
+    status: await safely(() => h.status(who), {}),
     metrics: keep('metrics')(await safely(() => h.metrics(who), [])),
     panels: keep('panels')(await safely(() => h.panels(who), [])),
     actions: visibleActions(user, ids, allPanes),
@@ -195,7 +195,7 @@ const server = http.createServer(async (req, res) => {
         if (!pm[2] && req.method === 'GET') return send(res, 200, { ok: true, pane: pane.id, data: await safely(() => (h.pane ? h.pane(pane.id, ctx) : null), null) });
         if (pm[2] && req.method === 'POST') {
           if (user.role !== 'admin' && !user.canRun) return send(res, 403, { ok: false, message: 'Your access can view but not change things.' });
-          const b = await body(req, PANE_BODY_LIMIT);   // room for a step's screenshot (up to 1.5 MB)
+          const b = await body(req, PANE_BODY_LIMIT);
           const t0 = Date.now();
           let out;
           try { out = h.paneAction ? (await h.paneAction(pane.id, String(b.action || ''), b.input ?? null, ctx)) || { ok: true, message: 'Done' } : { ok: false, message: 'This pane has no actions.' }; }
