@@ -444,3 +444,257 @@
 }
 
 @media (prefers-reduced-motion: reduce) { .cg-node, .cg-pill, .cg-more summary { transition: none; } }
+
+/* ---------- Workflow automation screens (panes/rpa-*.js): tokens only ---------- */
+.btn.danger { background: var(--bad-soft); border-color: var(--bad); color: var(--bad); }
+.rpa-grid2 { display: grid; gap: 12px; grid-template-columns: minmax(0, 1fr); align-items: end; }
+@media (min-width: 720px) { .rpa-grid2 { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+.rpa-span { grid-column: 1 / -1; }
+.rpa-inline { display: grid; gap: 8px; grid-template-columns: minmax(0, 1fr) auto; align-items: end; border-top: 1px solid var(--rule); padding-top: 12px; }
+.rpa-field { display: grid; gap: 4px; font-size: 14px; font-weight: 600; min-width: 0; }
+.rpa-field small { color: var(--ink-3); font-size: 12px; font-weight: 400; }
+.rpa-field input, .rpa-field select, .rpa-bind { font: inherit; font-weight: 400; padding: 10px 12px; border-radius: 10px; border: 1px solid var(--rule); background: var(--surface-2); color: var(--ink); min-height: 44px; width: 100%; }
+.rpa-bind { width: auto; max-width: 100%; }
+.rpa-check { display: flex; align-items: center; gap: 8px; font-size: 14px; min-height: 44px; }
+.rpa-check input { width: 20px; height: 20px; accent-color: var(--accent); }
+.rpa-days { display: flex; flex-wrap: wrap; gap: 4px 16px; }
+.rpa-values { display: grid; gap: 8px; }
+.rpa-suggest { display: grid; gap: 8px; justify-items: start; background: var(--accent-soft); border-radius: 12px; padding: 12px; }
+
+/* screenshots */
+.rpa-shot { display: block; width: 96px; height: 60px; object-fit: cover; border-radius: 10px; border: 1px solid var(--rule); background: var(--surface-2); }
+.rpa-thumb { padding: 0; border: 0; background: none; cursor: zoom-in; border-radius: 10px; min-width: 44px; min-height: 44px; }
+.rpa-thumb:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.rpa-noshot { display: inline-grid; place-items: center; width: 96px; height: 60px; border-radius: 10px; border: 1px dashed var(--rule); color: var(--ink-3); font-size: 12px; }
+.rpa-shot-big { display: block; width: 100%; max-width: 720px; height: auto; border-radius: 12px; border: 1px solid var(--rule); background: var(--surface-2); }
+.rpa-shotcell { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+
+/* recorder */
+.rpa-live { display: flex; align-items: center; gap: 8px; margin: 0; font-weight: 600; color: var(--bad); }
+.rpa-dot { width: 12px; height: 12px; border-radius: 50%; background: var(--bad); animation: rpa-pulse 1.6s ease-in-out infinite; }
+@keyframes rpa-pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.35; } }
+
+/* step editor */
+.rpa-steps { list-style: none; margin: 0; padding: 0; display: grid; }
+.rpa-step { display: grid; grid-template-columns: auto auto minmax(0, 1fr); gap: 8px 12px; padding: 12px 0; border-top: 1px solid var(--rule); align-items: start; }
+.rpa-step:first-child { border-top: 0; }
+.rpa-step.has-approval { border-left: 3px solid var(--warn); padding-left: 10px; }
+.rpa-num { width: 32px; height: 32px; border-radius: 50%; display: grid; place-items: center; font: 650 14px var(--sans); background: var(--accent-soft); color: var(--accent); font-variant-numeric: tabular-nums; }
+.rpa-step-main { display: grid; gap: 4px; min-width: 0; }
+.rpa-step-main b { font-weight: 650; color: var(--strong); overflow-wrap: anywhere; }
+.rpa-step-main small { color: var(--ink-3); font-size: 12px; overflow-wrap: anywhere; }
+.rpa-step-tools { grid-column: 1 / -1; display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
+@media (min-width: 900px) { .rpa-step { grid-template-columns: auto auto minmax(0, 1fr) auto; } .rpa-step-tools { grid-column: auto; max-width: 340px; justify-content: flex-end; } }
+.rpa-icon { min-width: 44px; min-height: 44px; border-radius: 10px; border: 1px solid var(--rule); background: var(--surface-2); color: var(--ink); font: 650 16px var(--sans); cursor: pointer; }
+.rpa-icon:disabled { opacity: 0.4; cursor: default; }
+.rpa-edit { border-top: 1px dashed var(--rule); padding-top: 8px; }
+.rpa-wfcell { display: grid; gap: 0; justify-items: start; }
+.rpa-wfcell small, .rpa-last small, .rpa-stcell small, .rpa-runstep small { color: var(--ink-3); font-size: 12px; }
+.rpa-wfname[aria-current="true"] { color: var(--strong); text-decoration: none; background: var(--accent-soft); border-radius: 8px; padding-inline: 8px; }
+.rpa-last, .rpa-stcell, .rpa-runstep { display: grid; gap: 2px; }
+.rpa-err { color: var(--bad); }
+
+/* live run */
+.rpa-runhead { display: grid; gap: 2px; min-width: 0; }
+.rpa-runhead small { color: var(--ink-3); font-size: 12px; }
+.rpa-dots { display: flex; gap: 4px; flex-wrap: wrap; }
+.rpa-dots i { flex: 1 1 24px; min-width: 16px; max-width: 64px; height: 8px; border-radius: 4px; background: var(--rule); }
+.rpa-dots .rpa-d-passed { background: var(--ok); } .rpa-dots .rpa-d-failed, .rpa-dots .rpa-d-rejected { background: var(--bad); }
+.rpa-dots .rpa-d-running { background: var(--accent); animation: rpa-pulse 1.2s ease-in-out infinite; } .rpa-dots .rpa-d-waiting, .rpa-dots .rpa-d-stopped { background: var(--warn); }
+.rpa-stage { display: grid; gap: 16px; }
+@media (min-width: 1000px) { .rpa-stage { grid-template-columns: minmax(0, 7fr) minmax(0, 5fr); align-items: start; } }
+.rpa-stage-shot { margin: 0; display: grid; gap: 6px; }
+.rpa-stage-shot figcaption { font-size: 12px; color: var(--ink-3); }
+.rpa-runstep.is-now b { color: var(--accent); }
+.rpa-approval { border-radius: 12px; padding: 12px; display: grid; gap: 8px; border: 1px solid var(--warn); background: var(--warn-soft); }
+.rpa-error { border-radius: 12px; padding: 12px; border: 1px solid var(--bad); }
+.rpa-error p { margin: 4px 0 0; }
+.rpa-st-running i { background: var(--accent-soft); color: var(--accent); border-color: transparent; }
+
+/* log */
+.rpa-log { list-style: none; margin: 0; padding: 0; display: grid; gap: 2px; font: 12px/1.5 var(--mono); }
+.rpa-log li { display: grid; grid-template-columns: auto auto minmax(0, 1fr); gap: 8px; padding: 4px 0; border-top: 1px solid var(--rule); }
+.rpa-log li:first-child { border-top: 0; }
+.rpa-log time { color: var(--ink-3); } .rpa-log b { text-transform: uppercase; color: var(--ink-2); min-width: 44px; } .rpa-log span { overflow-wrap: anywhere; color: var(--ink); }
+.rpa-log-error b { color: var(--bad); } .rpa-log-warn b { color: var(--warn); }
+.rpa-hist-head { grid-template-columns: minmax(0, 1fr); }
+@media (min-width: 720px) { .rpa-hist-head { grid-template-columns: auto minmax(0, 1fr) auto; align-items: center; } }
+/* shared by the workflow screens */
+.rpa-picker { max-width: 520px; }
+.rpa-empty { justify-items: start; }
+.rpa-wide { grid-column: 1 / -1; }
+.rpa-links { gap: 4px 16px; }
+.rpa-shotwhy { color: var(--ink-3); font-size: 12px; overflow-wrap: anywhere; }
+.rpa-sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+.rpa-dl { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 4px 12px; margin: 0; font-size: 14px; }
+.rpa-dl dt { color: var(--ink-3); } .rpa-dl dd { margin: 0; overflow-wrap: anywhere; }
+
+/* record: the live watcher and what the recorder sees */
+.rpa-watch { display: grid; gap: 4px; }
+.rpa-watch small { color: var(--ink-3); font-size: 12px; }
+.rpa-sees { margin: 0; }
+.rpa-sees figcaption { font-size: 12px; color: var(--ink-3); }
+
+/* typed inputs */
+.rpa-tiles { display: grid; gap: 16px; grid-template-columns: minmax(0, 1fr); }
+@media (min-width: 720px) { .rpa-tiles { grid-template-columns: repeat(3, minmax(0, 1fr)); } }
+.rpa-inputs { list-style: none; margin: 0; padding: 0; display: grid; }
+.rpa-input { display: grid; gap: 8px; padding: 12px 0 12px 12px; border-top: 1px solid var(--rule); border-left: 3px solid var(--rule); }
+.rpa-input:first-child { border-top: 0; }
+.rpa-input.rpa-g-variable { border-left-color: var(--ok); } .rpa-input.rpa-g-secret { border-left-color: var(--warn); }
+@media (min-width: 900px) { .rpa-input { grid-template-columns: minmax(0, 1fr) auto; align-items: center; } }
+.rpa-input-main { display: grid; gap: 2px; min-width: 0; }
+.rpa-input-main b { color: var(--strong); font-weight: 650; }
+.rpa-input-main small { color: var(--ink-3); font-size: 12px; overflow-wrap: anywhere; }
+.rpa-typed { font-size: 16px; color: var(--ink); overflow-wrap: anywhere; }
+.rpa-typed.is-var { color: var(--ok); } .rpa-typed.is-secret { color: var(--warn); letter-spacing: 0.04em; }
+.rpa-input-tools { justify-content: flex-start; }
+
+/* apps & pages: the route band */
+.rpa-route { list-style: none; margin: 0; padding: 0; display: grid; gap: 0; }
+.rpa-stop { position: relative; display: grid; gap: 2px; padding: 0 0 16px 28px; min-width: 0; }
+.rpa-stop::before { content: ""; position: absolute; left: 7px; top: 16px; bottom: 0; width: 2px; background: var(--rule); }
+.rpa-stop:last-child::before { display: none; }
+.rpa-stop-dot { position: absolute; left: 0; top: 2px; width: 16px; height: 16px; border-radius: 50%; border: 2px solid var(--accent); background: var(--surface); }
+.rpa-stop-app .rpa-stop-dot { border-radius: 4px; }
+.rpa-stop.is-passed .rpa-stop-dot { background: var(--ok); border-color: var(--ok); }
+.rpa-stop.is-failed .rpa-stop-dot { background: var(--bad); border-color: var(--bad); }
+.rpa-stop b { color: var(--strong); font-weight: 650; overflow-wrap: anywhere; }
+.rpa-stop small { color: var(--ink-3); font-size: 12px; }
+@media (min-width: 900px) {
+  .rpa-route { grid-auto-flow: column; grid-auto-columns: minmax(160px, 1fr); overflow-x: auto; padding-bottom: 4px; }
+  .rpa-stop { padding: 28px 16px 0 0; }
+  .rpa-stop::before { left: 16px; right: 0; top: 7px; bottom: auto; width: auto; height: 2px; }
+}
+.rpa-alertcard { border-left: 4px solid var(--bad); }
+.rpa-stops { display: grid; gap: 16px; grid-template-columns: minmax(0, 1fr); }
+@media (min-width: 900px) { .rpa-stops { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+.rpa-mini { list-style: none; margin: 0; padding: 0; display: grid; gap: 6px; }
+.rpa-mini li { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; font-size: 14px; }
+.rpa-mini-n { min-width: 24px; height: 24px; border-radius: 50%; display: inline-grid; place-items: center; font: 650 12px var(--sans); background: var(--accent-soft); color: var(--accent); }
+
+/* step screenshots: coverage bar and contact sheet */
+.rpa-cover { display: flex; height: 10px; border-radius: 5px; overflow: hidden; background: var(--surface-2); border: 1px solid var(--rule); }
+.rpa-cover i { display: block; flex-grow: 0; flex-shrink: 0; }
+.rpa-cover-ok { background: var(--ok); } .rpa-cover-held { background: var(--warn); } .rpa-cover-none { background: var(--bad); }
+.rpa-w0 { flex-basis: 0%; } .rpa-w5 { flex-basis: 5%; } .rpa-w10 { flex-basis: 10%; } .rpa-w15 { flex-basis: 15%; } .rpa-w20 { flex-basis: 20%; } .rpa-w25 { flex-basis: 25%; } .rpa-w30 { flex-basis: 30%; } .rpa-w35 { flex-basis: 35%; } .rpa-w40 { flex-basis: 40%; } .rpa-w45 { flex-basis: 45%; } .rpa-w50 { flex-basis: 50%; } .rpa-w55 { flex-basis: 55%; } .rpa-w60 { flex-basis: 60%; } .rpa-w65 { flex-basis: 65%; } .rpa-w70 { flex-basis: 70%; } .rpa-w75 { flex-basis: 75%; } .rpa-w80 { flex-basis: 80%; } .rpa-w85 { flex-basis: 85%; } .rpa-w90 { flex-basis: 90%; } .rpa-w95 { flex-basis: 95%; } .rpa-w100 { flex-basis: 100%; }
+.rpa-sheet { list-style: none; margin: 0; padding: 0; display: grid; gap: 16px; grid-template-columns: minmax(0, 1fr); }
+@media (min-width: 640px) { .rpa-sheet { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+@media (min-width: 1100px) { .rpa-sheet { grid-template-columns: repeat(3, minmax(0, 1fr)); } }
+.rpa-frame { gap: 8px; }
+.rpa-frame.is-failed { border-left: 4px solid var(--bad); }
+.rpa-frame-head { display: flex; justify-content: space-between; gap: 8px; align-items: start; }
+.rpa-frame-head b { color: var(--strong); font-weight: 650; overflow-wrap: anywhere; }
+.rpa-frame-pair { display: grid; gap: 8px; grid-template-columns: repeat(2, minmax(0, 1fr)); }
+.rpa-frame-img { display: grid; gap: 4px; padding: 0; border: 0; background: none; cursor: zoom-in; text-align: left; color: var(--ink-3); font-size: 12px; min-height: 44px; }
+.rpa-frame-img:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; border-radius: 10px; }
+.rpa-shot-frame { display: block; width: 100%; aspect-ratio: 16 / 10; object-fit: cover; object-position: top left; border-radius: 10px; border: 1px solid var(--rule); background: var(--surface-2); }
+.rpa-frame-none { display: grid; place-items: center; aspect-ratio: 16 / 10; border-radius: 10px; border: 1px dashed var(--rule); color: var(--ink-3); font-size: 12px; }
+
+/* step editor */
+.rpa-step.is-focus { background: var(--accent-soft); border-radius: 12px; padding-inline: 8px; }
+.rpa-peek { font-size: 14px; }
+.rpa-focus { position: sticky; top: 16px; }
+
+/* order & checkpoints: the flow */
+.rpa-flow { list-style: none; margin: 0; padding: 0; display: grid; gap: 8px; }
+.rpa-flowend { justify-self: start; padding: 4px 12px; border-radius: 999px; background: var(--surface-2); border: 1px solid var(--rule); color: var(--ink-2); font-size: 12px; font-weight: 650; }
+.rpa-flownode { display: grid; gap: 8px; padding-left: 16px; border-left: 2px solid var(--rule); }
+.rpa-flownode.is-dragging { opacity: 0.5; }
+.rpa-flowcard { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 8px 12px; align-items: start; padding: 12px; border-radius: 12px; border: 1px solid var(--rule); background: var(--surface); }
+.rpa-flownode[draggable="true"] .rpa-flowcard { cursor: grab; }
+.rpa-flowtools { grid-column: 1 / -1; display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
+@media (min-width: 900px) { .rpa-flowcard { grid-template-columns: auto minmax(0, 1fr) auto; } .rpa-flowtools { grid-column: auto; justify-content: flex-end; } }
+.rpa-posfield select { font: inherit; padding: 10px 12px; border-radius: 10px; border: 1px solid var(--rule); background: var(--surface-2); color: var(--ink); min-height: 44px; }
+.rpa-gate { display: grid; gap: 4px; padding: 12px; border-radius: 12px; border: 1px solid var(--warn); background: var(--warn-soft); color: var(--ink); font-size: 14px; }
+.rpa-gate b { color: var(--warn); }
+
+/* variables */
+.rpa-vargrid { display: grid; gap: 16px; grid-template-columns: minmax(0, 1fr); }
+@media (min-width: 720px) { .rpa-vargrid { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+.rpa-vargrid > .rpa-varcard:only-child { grid-column: 1 / -1; }
+.rpa-varcard.is-secret { border-left: 4px solid var(--warn); }
+.rpa-varcard small { color: var(--ink-3); font-size: 12px; }
+@media (prefers-reduced-motion: reduce) { .rpa-dot, .rpa-dots .rpa-d-running { animation: none; } .rpa-focus { position: static; } }
+
+/* ---------- design pass T-153 r1 ---------- */
+/* Overview: workflow automation as a Record → Build → Run pipeline under the outcome buttons */
+.cg-pipe { display: grid; gap: 12px; padding: 16px; border-radius: 16px; background: var(--surface); border: 1px solid var(--rule); box-shadow: var(--shadow); min-width: 0; }
+.cg-pipe-title { margin: 0; font: 650 16px var(--sans); letter-spacing: -0.01em; color: var(--strong); }
+.cg-pipe-cols { display: grid; gap: 16px; grid-template-columns: minmax(0, 1fr); counter-reset: none; }
+@media (min-width: 1100px) { .cg-pipe-cols { grid-template-columns: repeat(auto-fit, minmax(0, 1fr)); gap: 24px; } .cg-pipe-col + .cg-pipe-col { position: relative; } .cg-pipe-col + .cg-pipe-col::before { content: "→"; position: absolute; left: -18px; top: 6px; color: var(--accent); font: 650 14px var(--sans); } }
+.cg-pipe-col { display: grid; gap: 8px; align-content: start; min-width: 0; }
+.cg-pipe-head { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; gap: 10px; align-items: center; }
+.cg-pipe-head > span:nth-child(2) { display: grid; min-width: 0; }
+.cg-pipe-head b { color: var(--strong); font: 650 14px var(--sans); }
+.cg-pipe-head small { color: var(--ink-3); font-size: 12px; }
+.cg-pipe-n { width: 28px; height: 28px; border-radius: 50%; display: grid; place-items: center; font: 650 12px var(--sans); color: var(--accent); background: var(--accent-soft); }
+.cg-pipe .cg-hero-legend.is-tools { grid-template-columns: minmax(0, 1fr); gap: 6px; }
+@media (min-width: 560px) and (max-width: 1099px) { .cg-pipe .cg-hero-legend.is-tools { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+.cg-pipe .cg-node { min-height: 48px; padding: 6px 10px; }
+.cg-pipe .cg-node i { width: 28px; height: 28px; font-size: 14px; }
+.cg-pipe .cg-node-num b { font-size: 16px; }
+.cg-pipe .cg-node-num small { display: none; }
+@media (min-width: 1180px) { .cg-pipe .cg-hero-legend .cg-node { flex-wrap: nowrap; align-items: center; padding: 6px 10px; } .cg-pipe .cg-hero-legend .cg-node-num { flex: 0 0 auto; display: grid; padding-left: 0; } .cg-pipe .cg-hero-legend .cg-node-num b { font-size: 16px; } }
+
+/* Apps & pages: long page addresses wrap instead of pushing the phone screen sideways */
+.rpa-stops > *, .rpa-stopcard .cg-head > * { min-width: 0; }
+.rpa-stopcard h3, .rpa-mini li > span { overflow-wrap: anywhere; min-width: 0; }
+.rpa-mini li > span:not(.cg-chip):not(.cg-state):not(.rpa-mini-n) { flex: 1 1 0; }
+
+/* Workflow screens on phones: each table row becomes a compact card. The first cell (the name) spans the row
+   without a label, the rest sit up to three across with their label above, so a row is three short lines, not eight */
+@media (max-width: 639px) {
+  .rpa-pane .cg-records tr { display: grid; grid-template-columns: repeat(auto-fit, minmax(96px, 1fr)); gap: 8px 12px; padding: 12px 0; }
+  .rpa-pane .cg-records td { grid-template-columns: minmax(0, 1fr); gap: 2px; padding: 0; }
+  .rpa-pane .cg-records td:first-child { grid-column: 1 / -1; }
+  .rpa-pane .cg-records td:first-child::before { display: none; }
+}
+
+/* Run history: the details rail stays in view beside a long list; on phones it comes first */
+.rpa-looklist .cg-rule-main { display: grid; gap: 2px; justify-items: start; min-width: 0; }
+.rpa-looklist small { font-size: 12px; overflow-wrap: anywhere; }
+.rpa-looklist li { padding: 8px 0; border-top: 1px solid var(--rule); }
+.rpa-looklist li:first-child { border-top: 0; padding-top: 0; }
+@media (min-width: 720px) { .rpa-pane .cg-split > .rpa-detail { position: sticky; top: 16px; max-height: calc(100vh - 32px); overflow-y: auto; } }
+@media (max-width: 719px) { .rpa-pane .cg-split > .rpa-detail { order: -1; } }
+/* the enlarged screenshot: marked as the thing in focus, never wider than its card */
+.rpa-zoom { border: 2px solid var(--accent); scroll-margin-top: 16px; }
+.rpa-zoom:focus { outline: none; }
+.rpa-zoom .rpa-shot-big { max-width: 100%; }
+/* Workflows rail: the schedule and trigger read as a sentence first; their forms fold away once set */
+.rpa-when { margin: 0; display: grid; gap: 2px; padding: 12px; border-radius: 12px; background: var(--surface-2); border: 1px solid var(--rule); }
+.rpa-when b { color: var(--strong); font-weight: 650; font-size: 16px; }
+.rpa-when small { color: var(--ink-2); font-size: 12px; }
+
+/* ---------- round 2 design pass ---------- */
+/* demo banner: on phones keep it to the chip line plus one sentence (~110px) */
+@media (max-width: 639px) {
+  .cg-banner-more, .cg-banner-text small { display: none; }
+  .cg-banner-title { font-size: 14px; line-height: 1.25; }
+}
+/* what each row holds: a quiet key under the picker instead of a stray sentence */
+.rpa-colkey { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 0; margin: 0; font-size: 12px; font-weight: 650; letter-spacing: 0.06em; text-transform: uppercase; color: var(--ink-3); }
+.rpa-colkey span:not(.rpa-colkey-l) + span::before { content: "›"; padding: 0 8px; color: var(--rule); font-weight: 400; }
+.rpa-colkey-l { margin-right: 10px; padding: 2px 8px; border-radius: 999px; background: var(--surface-2); border: 1px solid var(--rule); color: var(--ink-2); letter-spacing: 0.02em; text-transform: none; }
+/* Typed inputs: the three counts sit side by side on phones too, as compact numbers */
+@media (max-width: 719px) {
+  .rpa-tiles { grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; }
+  .rpa-tiles > .cg-card { padding: 12px; gap: 4px; }
+  .rpa-tiles .cg-big b { font-size: 28px; }
+  .rpa-tiles .cg-big span { font-size: 12px; line-height: 1.3; color: var(--ink-2); }
+  .rpa-tiles .cg-big small, .rpa-tiles .cg-updated, .rpa-tiles > .cg-card > :not(.cg-big) { display: none; }
+}
+/* Step screenshots: a real contact sheet on phones, two frames across */
+@media (max-width: 639px) {
+  .rpa-sheet { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
+  .rpa-sheet > .rpa-frame { padding: 10px; gap: 6px; }
+  .rpa-frame-head { flex-direction: column; gap: 4px; }
+  .rpa-frame-head b { font-size: 14px; line-height: 1.3; }
+  .rpa-frame-pair { grid-template-columns: minmax(0, 1fr); }
+  .rpa-sheet .linkbtn { min-height: 44px; text-align: left; }
+}
+/* Workflows: Schedule and Trigger follow the library while it scrolls */
+@media (min-width: 720px) { .rpa-pane .cg-split > .rpa-follow { position: sticky; top: 16px; max-height: calc(100vh - 32px); overflow-y: auto; } }
+@media (prefers-reduced-motion: reduce) { .rpa-pane .cg-split > .rpa-follow { position: static; max-height: none; } }
+@media (max-width: 479px) { .cg-banner-title { display: none; } .cg-banner { grid-template-columns: auto 1fr auto; } }

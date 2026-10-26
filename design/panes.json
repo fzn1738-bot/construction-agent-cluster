@@ -1,5 +1,5 @@
 {
-  "note": "Sidebar tabs are client outcomes only. The request's build checklist (re-plan, real screens, working actions, connections, keys in Settings, demo data, overview visual) is met across these tabs, the Overview centrepiece and HQ's Settings/Connections screens, not as tabs of its own.",
+  "note": "Sidebar tabs are client outcomes. The four site outcomes come first; the ten Workflow Automation (RPA) tabs follow, grouped on Overview as a Record → Build → Run pipeline. The request's build checklist (connections, keys in Settings, demo data, overview visual) is met across these tabs, the Overview centrepiece and HQ's Settings/Connections screens, not as tabs of its own.",
   "panes": [
     {
       "id": "documents",
@@ -32,6 +32,86 @@
       "composition": "Three tiles (record size + integrity with Check and Export CSV; events by source; what is stored, in plain words) over a full-width ledger with source and result filters (both counted), sources in plain words (Site folder, FTP, Inbox, Schedule), each event split into a muted source prefix and readable text, paged 15 at a time; two lines per event on phones.",
       "primaryAction": "check",
       "empty": "No events yet."
+    },
+    {
+      "id": "rpa-record",
+      "title": "Record a workflow",
+      "layout": "split",
+      "composition": "Recorder console (Record mode chip, start form or live watcher with Stop/Discard, then save-as-workflow), 'What the recorder sees' (latest capture large), captured steps (step, action, target, screenshot); rail: what is kept (privacy rules + counters) and recent recordings. Phone rows are compact cards.",
+      "primaryAction": "start",
+      "empty": "Nothing captured yet. Start a recording and do the task."
+    },
+    {
+      "id": "rpa-typing",
+      "title": "Typed inputs",
+      "layout": "grid",
+      "composition": "Three count tiles (as recorded / variable / secret; still three across on phones as compact numbers), then the full-width list of everything typed with a row key under the picker, each with its next action, and typing still waiting in unsaved recordings.",
+      "primaryAction": "make-variable",
+      "empty": "No step types anything yet."
+    },
+    {
+      "id": "rpa-pages",
+      "title": "Apps & pages",
+      "layout": "focus",
+      "composition": "Full-width route band (each app switch and page change as a stop on a line, last replay state), 'Where the screen had changed' (red edge when replays missed something), then each stop as a card with its steps and a folded address editor. Long page addresses wrap; nothing scrolls sideways on phones.",
+      "primaryAction": "set-page",
+      "empty": "This workflow has no steps yet."
+    },
+    {
+      "id": "rpa-screens",
+      "title": "Step screenshots",
+      "layout": "grid",
+      "composition": "Source picker, coverage bar and row key, then a contact sheet of every step (2 across on phones, 2 from 640px, 3 from 1100px); for runs, replayed screen beside the recorded one.",
+      "primaryAction": "pick",
+      "empty": "No screenshots yet."
+    },
+    {
+      "id": "rpa-workflows",
+      "title": "Workflows",
+      "layout": "split",
+      "composition": "Recordings ready to become workflows, the library (client filter for the owner), the chosen workflow's card (chips, links to editor/order/variables/run, description, a folded 'Rename, describe, duplicate or delete' form, give a copy to a client, recent runs); rail (sticky from 720px): Schedule and Trigger, chip On/Paused/Off, a plain sentence first with its form folded once set.",
+      "primaryAction": "save",
+      "empty": "No workflows yet. Record a task, or create an empty workflow below."
+    },
+    {
+      "id": "rpa-steps",
+      "title": "Step editor",
+      "layout": "split",
+      "composition": "Steps list with rename-in-place and edit; sticky rail with the focused step's screenshot and links.",
+      "primaryAction": "rename",
+      "empty": "No workflows yet."
+    },
+    {
+      "id": "rpa-order",
+      "title": "Order & checkpoints",
+      "layout": "focus",
+      "composition": "Vertical flow Start → Done: drag, nudge or send a step to a position; approval gates between steps with what to check.",
+      "primaryAction": "step-move",
+      "empty": "This workflow has no steps yet."
+    },
+    {
+      "id": "rpa-variables",
+      "title": "Variables",
+      "layout": "split",
+      "composition": "Main: one card per variable (2 across) and the binding table (which step types which variable, suggestions); rail: Add a variable, Logins from Connections.",
+      "primaryAction": "var-add",
+      "empty": "No variables yet: every step types exactly what was recorded."
+    },
+    {
+      "id": "rpa-run",
+      "title": "Run a workflow",
+      "layout": "focus",
+      "composition": "Start band (workflow, its variables, Start run, Stop everything), then the live run: progress dots, Stop, approval box when a checkpoint waits, steps with screenshots beside the current screen, recent runs, log. Refreshes every 1.5 s while live.",
+      "primaryAction": "start",
+      "empty": "No workflows yet. Record a task first, then run it here."
+    },
+    {
+      "id": "rpa-history",
+      "title": "Run history",
+      "layout": "split",
+      "composition": "Summary (success rate, chips), 24-hour runs and results charts, then the filterable run list (8 per page on phones, 12 on wide) beside a sticky details rail: 'Runs that need a look' until one is chosen, then its error, steps with screenshots, log, Continue from the failed step / Run again. On phones the rail comes first.",
+      "primaryAction": "resume",
+      "empty": "No runs yet. Start one in Run a workflow."
     }
   ]
 }

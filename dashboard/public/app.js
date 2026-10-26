@@ -56,7 +56,6 @@
     KEY = $('#code').value.trim(); session.set('app-key', KEY);
     try { await api('api/me'); $('#gate').hidden = true; $('#shell').hidden = false; $('#code').value = ''; poll(true); } catch {}
   });
-  $('#demoForm').addEventListener('submit', (e) => e.preventDefault());
   $('#signOut').addEventListener('click', () => { KEY = ''; session.del('app-key'); last = null; showGate(); });
 
   // ---------- sidebar ----------
@@ -282,11 +281,21 @@
   async function loadAdmin() { admin = await api('api/admin/state'); return admin; }
   const say = (el, text, ok = true) => { el.hidden = false; el.className = 'runout ' + (ok ? 'ok' : 'bad'); el.textContent = text; };
   function renderSettings() {
-    const f = $('#settingsForm'), sc = admin.settings.schema, v = admin.settings.values;
+    const inConn = new Set((admin.connections || []).flatMap((c) => c.fields.concat(c.optional || [])));
+    const f = $('#settingsForm'), sc = admin.settings.schema.filter((x) => !inConn.has(x.key)), v = admin.settings.values;
     const msg = h('div', { class: 'runout', hidden: true, role: 'status' });
-    if (!sc.length) return replace(f, h('h3', { text: 'Settings' }), h('p', { class: 'empty', text: 'This solution has no settings yet. The plan lists them in dashboard.json under "settings".' }));
+    if (!sc.length) return replace(f, h('h3', { text: 'Settings' }), h('p', { class: 'empty', text: inConn.size ? 'Keys and logins are under Connections.' : 'This solution has no settings yet. The plan lists them in dashboard.json under "settings".' }));
     const groups = [...new Set(sc.map((x) => x.group))];
-    const field = (x) => settingField(x, v);
+    const field = (x) => {
+      const id = 'set-' + x.key;
+      let input;
+      if (x.type === 'toggle') input = h('input', { type: 'checkbox', id, name: x.key, checked: !!v[x.key], role: 'switch' });
+      else if (x.type === 'select') input = h('select', { id, name: x.key }, x.options.map((o) => h('option', { value: o, text: o, selected: String(v[x.key]) === o })));
+      else if (x.type === 'textarea') input = h('textarea', { id, name: x.key, text: v[x.key] ?? '' });
+      else input = h('input', { id, name: x.key, type: x.type === 'number' ? 'number' : x.type === 'secret' ? 'password' : 'text', value: v[x.key] ?? '', placeholder: x.type === 'secret' ? (v[x.key] ? 'Saved; type to replace' : 'Not set') : '', autocomplete: 'off' });
+      if (x.type === 'secret') input.value = '';
+      return h('div', { class: 'field' + (x.type === 'toggle' ? ' toggle' : '') }, h('label', { for: id, text: x.label }), input, x.help ? h('small', { text: x.help }) : null);
+    };
     replace(f, groups.map((g) => h('fieldset', {}, groups.length > 1 ? h('legend', { text: g }) : null, sc.filter((x) => x.group === g).map(field))), h('div', { class: 'row' }, h('button', { class: 'btn primary', type: 'submit', text: 'Save settings' })), msg);
     f.onsubmit = async (e) => {
       e.preventDefault();
@@ -303,16 +312,7 @@
     else if (x.type === 'select') input = h('select', { id, name: x.key }, x.options.map((o) => h('option', { value: o, text: o, selected: String(v[x.key]) === o })));
     else if (x.type === 'textarea') input = h('textarea', { id, name: x.key, text: v[x.key] ?? '' });
     else input = h('input', { id, name: x.key, type: x.type === 'number' ? 'number' : x.type === 'secret' ? 'password' : 'text', value: x.type === 'secret' ? '' : (v[x.key] ?? ''), placeholder: x.type === 'secret' ? (v[x.key] ? 'Saved; type to replace' : 'Not set') : '', autocomplete: 'off' });
-    const clear = x.type === 'secret' && v[x.key] ? h('button', { class: 'linkbtn danger', type: 'button', text: 'Clear ' + x.label, onclick: async () => {
-      try {
-        await post('api/admin/settings', { values: { [x.key]: null } });
-        await loadAdmin();
-        renderConnections();
-        renderSettings();
-        poll();
-      } catch (err) { window.alert(err.message); }
-    } }) : null;
-    return h('div', { class: 'field' + (x.type === 'toggle' ? ' toggle' : '') }, h('label', { for: id, text: x.label }), input, clear, x.help ? h('small', { text: x.help }) : null);
+    return h('div', { class: 'field' + (x.type === 'toggle' ? ' toggle' : '') }, h('label', { for: id, text: x.label }), input, x.help ? h('small', { text: x.help }) : null);
   }
   function renderConnections() {
     const list = admin.connections || [], sc = admin.settings.schema, v = admin.settings.values;
@@ -405,6 +405,7 @@
     replace($('#allActions'), actionButtons(admin.actions, $('#ctlOut'), true));
     const dm = $('#demoForm');
     if (dm) {
+      dm.onsubmit = (e) => e.preventDefault();
       const cb = h('input', { type: 'checkbox', id: 'dm-on', role: 'switch', checked: !!(admin.demo && admin.demo.on) });
       cb.addEventListener('change', async () => { await post('api/admin/demo', { on: cb.checked }); await loadAdmin(); poll(); });
       replace(dm, h('h3', { text: 'Demo data' }), h('p', { class: 'hint', text: 'Show realistic sample data on every screen, for trying the dashboard before its connections are set up. Turns off by itself once they are, unless you switch it here.' }), h('div', { class: 'field toggle' }, h('label', { for: 'dm-on', text: 'Show demo data' }), cb));

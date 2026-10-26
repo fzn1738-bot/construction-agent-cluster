@@ -36,6 +36,7 @@ const body = (req, limit = 65536) => new Promise((resolve, reject) => {
   let s = ''; req.on('data', (d) => { s += d; if (s.length > limit) { reject(new Error('too large')); req.destroy(); } });
   req.on('end', () => { try { resolve(s ? JSON.parse(s) : {}); } catch { reject(new Error('bad JSON')); } });
 });
+const PANE_BODY_LIMIT = 2 * 1024 * 1024;
 const safely = async (fn, fallback) => { try { const v = await fn(); return v ?? fallback; } catch (e) { return { error: String(e && e.message || e) }; } };
 const list = (v) => (Array.isArray(v) ? v : []);
 
@@ -70,16 +71,18 @@ async function summary(user) {
   const mine = user.role === 'admin' ? runs : runs.filter((r) => r.by === user.id || ids.has(r.pane) || r.pane === 'overview');
   const m = store.maintenance();
   const h = src();
-  const states = await safely(() => (h.paneStatus ? h.paneStatus() : {}), {});
+  // A client's overview must only count the workflows and runs belonging to that client.
+  const who = { user: { id: user.id, name: user.name, role: user.role } };
+  const states = await safely(() => (h.paneStatus ? h.paneStatus(who) : {}), {});
   const cs = store.connectionSummary();
   return {
     app: { name: SPEC.title || 'Dashboard', tagline: SPEC.tagline || '', ring: list(SPEC.ring).map((r) => r.label), mock: MOCK, demo: !MOCK && store.demoOn(), hero: hasFile('hero.js') ? 'hero.js' : null },
     me: { name: user.name, role: user.role, canRun: user.role === 'admin' || !!user.canRun },
     panes: allowed.map((p) => ({ id: p.id, title: p.title, summary: p.summary, feature: p.feature, layout: p.layout, clientVisible: p.clientVisible, view: paneView(p.id), state: states && states[p.id] ? states[p.id] : null })),
     connections: user.role === 'admin' ? cs : { total: cs.total, ready: cs.ready },
-    status: await safely(() => h.status(), {}),
-    metrics: keep('metrics')(await safely(() => h.metrics(), [])),
-    panels: keep('panels')(await safely(() => h.panels(), [])),
+    status: await safely(() => h.status(who), {}),
+    metrics: keep('metrics')(await safely(() => h.metrics(who), [])),
+    panels: keep('panels')(await safely(() => h.panels(who), [])),
     actions: visibleActions(user, ids, allPanes),
     reports: list(await safely(() => (h.reports ? h.reports() : []), [])),
     runs: mine.slice(0, 20),
@@ -192,7 +195,7 @@ const server = http.createServer(async (req, res) => {
         if (!pm[2] && req.method === 'GET') return send(res, 200, { ok: true, pane: pane.id, data: await safely(() => (h.pane ? h.pane(pane.id, ctx) : null), null) });
         if (pm[2] && req.method === 'POST') {
           if (user.role !== 'admin' && !user.canRun) return send(res, 403, { ok: false, message: 'Your access can view but not change things.' });
-          const b = await body(req);
+          const b = await body(req, PANE_BODY_LIMIT);
           const t0 = Date.now();
           let out;
           try { out = h.paneAction ? (await h.paneAction(pane.id, String(b.action || ''), b.input ?? null, ctx)) || { ok: true, message: 'Done' } : { ok: false, message: 'This pane has no actions.' }; }

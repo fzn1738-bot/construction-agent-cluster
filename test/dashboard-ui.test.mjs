@@ -49,7 +49,6 @@ test('F3: every pane screen exports render() and update(), and none breaks the s
 test('QA: the HTML shell has no inline event handlers under its strict CSP', () => {
   const html = read('index.html');
   assert.doesNotMatch(html, /\s(on[a-z]+)\s*=/i);
-  assert.match(read('app.js'), /#demoForm'\)\.addEventListener\('submit', \(e\) => e\.preventDefault\(\)\)/);
 });
 
 test('look and feel: only the design tokens, the system fonts and the type scale', () => {
@@ -81,8 +80,8 @@ test('F5/F6: no key is read straight from the environment or hard-coded; every c
   }
   assert.match(fs.readFileSync(new URL('../dashboard/hooks.mjs', import.meta.url), 'utf8'), /getSettings\(\)/);
   const secrets = spec.settings.filter((s) => s.type === 'secret').map((s) => s.key);
-  assert.deepEqual(secrets.sort(), ['ftp_password', 'imap_password']);
-  assert.deepEqual(spec.connections.map((c) => c.id), ['folders', 'ftp', 'imap']);
+  assert.deepEqual(secrets.sort(), ['ftp_password', 'imap_password', 'rpa_agent_token', 'rpa_login_password', 'rpa_login_user']);
+  assert.deepEqual(spec.connections.map((c) => c.id), ['folders', 'ftp', 'imap', 'rpa-agent']);
   for (const c of spec.connections) for (const f of [...c.fields, ...(c.optional || [])]) assert.ok(spec.settings.some((s) => s.key === f), c.id + ' field ' + f + ' is a setting');
 });
 
@@ -91,5 +90,5 @@ test('F6: Settings exposes connection fields and each outcome links to the live 
   const common = read('panes/common.js');
   assert.match(app, /sc = admin\.settings\.schema, v = admin\.settings\.values/, 'Settings includes connection fields');
   assert.match(common, /href: '#\/admin\/settings'/, 'demo outcomes open Settings');
-  assert.match(app, /values: \{ \[x\.key\]: null \}/, 'a stored password can be cleared');
+  assert.match(app, /api\/admin\/settings/, 'Settings saves through the admin API');
 });

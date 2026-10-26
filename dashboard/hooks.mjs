@@ -28,6 +28,9 @@ import * as kit from './store.mjs';
 import { getSettings, saveSettings } from './store.mjs';
 import * as demo from './demo.mjs';
 import * as O from './outcomes.mjs';
+import { isRpaPane, RPA_ACTIONS, workflowOverview } from './rpa-panes.mjs';
+import { demoRpa } from './rpa-demo.mjs';
+import { liveRpa, agentReady, probeAgent, startScheduler } from './rpa-live.mjs';
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 const ROOT = path.join(HERE, '..');
@@ -187,6 +190,8 @@ export function allowFor(user) {
   return (id) => ids.has(id);
 }
 const isAdmin = (ctx) => !ctx || !ctx.user || ctx.user.role === 'admin';
+/** Workflow automation: the real store once the automation agent is saved in Connections, the seeded demo until then. */
+const rpa = () => (agentReady() ? liveRpa() : demoRpa());
 
 // ---------- helpers ----------
 const rel = (iso) => O.rel(iso);
@@ -436,19 +441,21 @@ async function world() {
 }
 
 // ---------- status, metrics, panels ----------
-export async function status() {
+export async function status(ctx = {}) {
   syncDemo(false);
   const { w } = await world();
-  return O.statusOf(w);
+  const base = O.statusOf(w);
+  return agentReady() ? workflowOverview(base, liveRpa(), ctx) : base;
 }
 
 /** One state per tab, for the Overview centrepiece and the sidebar. Reads local state only (polled often). */
-export async function paneStatus() {
+export async function paneStatus(ctx = {}) {
   const { w } = await world();
-  return O.paneStates(w);
+  return { ...O.paneStates(w), ...rpa().states(ctx) };
 }
 
-export async function metrics() {
+/** The numbers; the workflow ones are counted for whoever asks (a client sees its own workflows' numbers only). */
+export async function metrics(ctx = {}) {
   const { w, data } = await world();
   const docs = data.documents, tr = data.transfers, inb = data.inbox, act = data['activity-log'];
   const t = (list) => hourly(list.map((x) => ({ at: x.at }))).values;
@@ -461,14 +468,15 @@ export async function metrics() {
     { key: 'emailsProcessed', label: 'Emails triaged', value: inb.summary.triaged, unit: '', trend: t(inb.messages), good: 'up', pane: 'inbox' },
     { key: 'emailBacklog', label: 'Inbox backlog', value: inb.summary.backlog, unit: '', trend: [inb.summary.backlog], good: 'down', pane: 'inbox' },
     { key: 'logRows', label: 'Events on record', value: act.summary.rows, unit: '', trend: t(act.events), good: 'up', pane: 'activity-log' },
-    { key: 'dbIntegrity', label: 'Record integrity', value: act.summary.integrity ? 100 : 0, unit: '%', trend: [act.summary.integrity ? 100 : 0], good: 'up', pane: 'activity-log' }
+    { key: 'dbIntegrity', label: 'Record integrity', value: act.summary.integrity ? 100 : 0, unit: '%', trend: [act.summary.integrity ? 100 : 0], good: 'up', pane: 'activity-log' },
+    ...rpa().metrics(ctx)
   ].filter((m) => SPEC.metrics.some((s) => s.key === m.key));
 }
 
 /** One row per monitor: name, state chip, last run, queue depth. */
 export function monitorTable() { return { title: 'Monitors', kind: 'table', columns: ['Monitor', 'State', 'Last run', 'Queue'], rows: monitorRows(runtime()), pane: 'overview' }; }
 
-export async function panels() {
+export async function panels(ctx = {}) {
   const { w, data } = await world();
   const n = cfg().rows;
   const docs = data.documents, tr = data.transfers, inb = data.inbox, act = data['activity-log'];
@@ -483,7 +491,8 @@ export async function panels() {
     'Latest events': () => ({ title: 'Latest events', kind: 'table', columns: ['Source', 'Result', 'What', 'When'], rows: act.events.slice(0, n).map((e) => [e.source, e.result, e.what, rel(e.at)]), pane: 'activity-log' })
   };
   const meta = Object.fromEntries(O.metaPanels(w).map((p) => [p.title, p]));
-  return SPEC.panels.map((p) => (own[p.title] ? own[p.title]() : meta[p.title])).filter(Boolean);
+  const flow = Object.fromEntries(rpa().panels(ctx).map((p) => [p.title, p]));
+  return SPEC.panels.map((p) => (own[p.title] ? own[p.title]() : flow[p.title] || meta[p.title])).filter(Boolean);
 }
 
 // ---------- actions ----------
@@ -553,6 +562,7 @@ export async function run(id, input, ctx = {}) {
   invalidate();
   const allow = allowFor(ctx && ctx.user);
   try {
+    if (RPA_ACTIONS.includes(id)) return rpa().run(id, ctx);
     const o = O.OUTCOMES.find((x) => x.action === id);
     if (o) return await runOutcome(o, allow);
     if (id === 'run-outcomes') return await runMine(allow);
@@ -580,6 +590,7 @@ async function apply(values) { const changed = saveSettings(values); if (changed
 const csvCell = (v) => '"' + String(v ?? '').replace(/"/g, '""') + '"';
 
 export async function pane(id, ctx = {}) {
+  if (isRpaPane(id)) return rpa().pane(id, ctx);
   if (OUTCOME_DATA[id]) return OUTCOME_DATA[id]();
   if (!Object.values(PANE).includes(id)) return null;
   const { w } = await world();
@@ -589,6 +600,7 @@ export async function pane(id, ctx = {}) {
 export async function paneAction(id, action, input, ctx = {}) {
   await settled();
   invalidate();
+  if (isRpaPane(id)) return rpa().act(id, action, input, ctx);
   const inp = input && typeof input === 'object' ? input : {};
   const allow = allowFor(ctx && ctx.user);
   const admin = isAdmin(ctx);
@@ -697,6 +709,7 @@ const errText = (e) => String((e && e.message) || e).slice(0, 200);
 
 async function probe(id, s) {
   const t0 = Date.now();
+  if (id === 'rpa-agent') return probeAgent(s);
   if (id === 'folders') {
     const p = String(s.watch_folder || '');
     if (!p) return { ok: false, message: 'No folder set' };
@@ -760,5 +773,14 @@ export async function reports() {
 try {
   await init();
   syncDemo(false); trackKeys();
+  // new log rows after the cursor, a batch at a time (rpa-live pumpTriggers moves the cursor row by row)
+  startScheduler((since, limit) => {
+    try {
+      const { store } = runtime();
+      const max = Number(store.db.prepare('SELECT MAX(id) AS m FROM sync_log').get().m || 0);
+      if (since == null) return { rows: [], max };
+      return { rows: store.db.prepare('SELECT * FROM sync_log WHERE id > ? ORDER BY id LIMIT ?').all(since, Math.max(1, limit || 200)).map(parseRow), max };
+    } catch { return null; }
+  });
   for (const f of LEGACY) fs.rmSync(path.join(REPORTS, f), { force: true });   // older builds wrote per-outcome detail into shared Reports
 } catch (e) { console.error('dashboard init failed: ' + e.message); }

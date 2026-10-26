@@ -26,7 +26,8 @@ export function demoBanner(ctx, d) {
     chip(h, 'Demo data', 'demo'),
     h('b', { class: 'cg-banner-title', text: own ? 'Showing demo records' : 'Sample numbers' }),
     h('p', { class: 'cg-banner-text' },
-      own ? (d.needs || 'Enter the keys for this service') + ' to see your own records here. Buttons work on the demo records until then.' : 'Every number on this screen is a demo sample until the keys are saved.',
+      own ? (d.needs || 'Enter the keys for this service') + ' to see your own records here.' : 'Every number on this screen is a demo sample until the keys are saved.',
+      own ? h('span', { class: 'cg-banner-more', text: ' Buttons work on the demo records until then.' }) : null,
       own && d.missing && d.missing.length ? h('small', { text: ' Still missing: ' + d.missing.join(', ') + '.' }) : null),
     ctx.me.role === 'admin' ? h('a', { class: 'btn cg-banner-go', href: '#/admin/settings', text: 'Open Settings' }) : null);
 }

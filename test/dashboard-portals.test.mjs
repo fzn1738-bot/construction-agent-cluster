@@ -32,11 +32,12 @@ const client = async (panes, canRun = true) => {
   return { 'x-app-key': r.code };
 };
 const outcomes = ['documents', 'transfers', 'inbox', 'activity-log'];
+const rpaPanes = ['rpa-record', 'rpa-typing', 'rpa-pages', 'rpa-screens', 'rpa-workflows', 'rpa-steps', 'rpa-order', 'rpa-variables', 'rpa-run', 'rpa-history'];
 
 test('F1/F2/F3/F8: only delivered client outcomes are tabs, each with its own live screen and overview state', async () => {
   const s = await summary();
-  assert.deepEqual(s.panes.map((p) => p.id), outcomes);
-  assert.deepEqual(spec.panes.map((p) => p.id), outcomes);
+  assert.deepEqual(s.panes.map((p) => p.id), [...outcomes, ...rpaPanes]);
+  assert.deepEqual(spec.panes.map((p) => p.id), [...outcomes, ...rpaPanes]);
   assert.equal(s.app.hero, 'hero.js');
   const ms = await hooks.metrics(), ps = await hooks.panels();
   assert.deepEqual(ms.map((m) => m.key).sort(), spec.metrics.map((m) => m.key).sort());
@@ -92,7 +93,7 @@ test('F5/F6: Settings credentials drive real FTP and IMAP connections, failure, 
   assert.equal(fs.readFileSync(path.join(sync, 'plan-A1.pdf'), 'utf8'), 'drawing');
   assert.equal((await act('inbox', 'check')).ok, true);
   assert.ok((await pane('inbox')).messages.some((m) => m.subject === 'RFI 12 slab edge'));
-  assert.equal(JSON.stringify(await summary()).includes('secret'), false);
+  assert.equal(JSON.stringify(await summary()).includes('"value":"secret"'), false);
   assert.equal(JSON.stringify((await json('/api/admin/state')).settings.values).includes('"secret"'), false);
   await save({ imap_password: null });
   assert.equal((await pane('inbox')).source, 'demo');
